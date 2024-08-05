@@ -37,7 +37,7 @@ router.get("", async (req, res) => {
 });
 
 
-//Recherche par mdp(lib_employé)
+//Recherche par id(lib_employé)
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
 

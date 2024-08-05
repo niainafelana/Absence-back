@@ -6,7 +6,8 @@ const cors = require('cors');
 /**import de la connexion bd */
 const db = require('./db');
 const Employe = require('./models/employe'); // Importer le modèle Employe
-
+const Absence = require('./models/absence');//Importation modèle Absence
+const Demande = require('./models/demande');//Importation modèle demande
 /**initialisation de l'api */
 const app = express();
 app.use(cors());
@@ -15,10 +16,12 @@ app.use(express.urlencoded({ extended: true }));
 
 //Importation des routes
 const employe_router = require('./routes/employes');//importation route employe
-
+const demande_router =require('./routes/demandes');
+const  absence_router = require('./routes/absences');
 /****Mise en place du routage */
 app.use('/employes', employe_router); //les employés
-
+app.use('/demandes', demande_router);
+app.use('/absences', absence_router);
 /**Demarrer serveur avec test bd */
 (async () => {
     try {
