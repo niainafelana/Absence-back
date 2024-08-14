@@ -45,15 +45,27 @@ const Demande = DB.define('Demande',{
         allowNull: false,
       },
       duredebut: {
-        type: DataTypes.ENUM('demi-matin', 'demi-apres-midi', 'journee'),
-        allowNull: false,
+        type: DataTypes.STRING,
+        allowNull: false,  // 'demi-matin', 'demi-apres-midi' ou 'journee'
       },
       durefin: {
-        type: DataTypes.ENUM('demi-matin', 'demi-apres-midi', 'journee'),
+        type: DataTypes.STRING,
+        allowNull: false,  // 'demi-matin', 'demi-apres-midi' ou 'journee'
+      },
+      jours_absence: {
+        type: DataTypes.FLOAT,
         allowNull: false,
-      }
+      },
+      motif: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
       
 });
+Demande.belongsTo(Employe, { foreignKey: 'id_employe', as: 'employe' });
+Demande.belongsTo(Absence, { foreignKey: 'id_absence', as: 'absence' });
+Employe.hasMany(Demande, { foreignKey: 'id_employe', as: 'demandes' });
+Absence.hasMany(Demande, { foreignKey: 'id_absence', as: 'demandes' });
 sequelize.sync()
 
 module.exports= Demande;

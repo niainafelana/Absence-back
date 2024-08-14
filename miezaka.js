@@ -31,7 +31,6 @@ app.use('/absences', absence_router);
        
         await db.sync(); 
         console.log('Database synchronized');
-        
         app.listen(process.env.server_port, () => {
             console.log(`Server running on port ${process.env.server_port}`);
         });

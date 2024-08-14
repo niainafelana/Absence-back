@@ -9,7 +9,8 @@ const sequelize = new Sequelize(
         host: process.env.db_host,
         port: process.env.db_port,
         dialect: 'mysql',
-        logging: false
+        logging: false,
+        timezone: '+03:00'
     }
 );
 //Database bien connecter

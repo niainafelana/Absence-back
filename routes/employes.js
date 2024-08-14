@@ -98,6 +98,19 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: 'Erreur lors de la suppression de l\'employé.' });
   }
 });
+//agmentation du solde des employés
+cron.schedule('*/1 * * * *', async () => { // Toutes les minutes pour le test
+  try {
+    const employes = await Employe.findAll();
+    for (const employe of employes) {
+      employe.solde_employe = parseFloat(employe.solde_employe) + 2.5;
+      await employe.save();
+    }
+    console.log('Solde des employés augmente.');
+  } catch (error) {
+    console.error('Erreur :', error);
+  }
+});
 
 
 

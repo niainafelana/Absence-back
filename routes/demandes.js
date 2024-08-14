@@ -4,131 +4,273 @@ const Demande = require("../models/demande");
 const Absence = require("../models/absence");
 const { Op } = require("sequelize");
 const router = express.Router();
+const moment = require("moment");
 
-// Ajout demande et ses conditions
-router.put("", async (req, res) => {
-  const { id_employe, id_absence, datedeb, datefin, duredebut, durefin } =
-    req.body;
+function verificationchamp(requiredFields, bodyFields) {
+  const tsyampy = requiredFields.filter((field) => !(field in bodyFields));
+  const miotra = Object.keys(bodyFields).filter(
+    (field) => !requiredFields.includes(field)
+  );
 
-  // Vérification des données manquantes
-  if (
-    !id_employe ||
-    !id_absence ||
-    !datedeb ||
-    !datefin ||
-    !duredebut ||
-    !durefin
-  ) {
-    return res.status(400).json({ message: "Données manquantes" });
+  if (tsyampy.length > 0) {
+    return { valid: false, error: `Champs manquants: ${tsyampy.join(", ")}` };
   }
 
-  try {
-    const employe = await Employe.findByPk(id_employe);
-    const absence = await Absence.findByPk(id_absence);
+  if (miotra.length > 0) {
+    return {
+      valid: false,
+      error: `Champs supplémentaires: ${miotra.join(", ")}`,
+    };
+  }
 
-    if (!employe || !absence) {
-      return res.status(404).json({ error: "Employé ou congé non trouvé" });
-    }
-    // calcul jours d'absence pour la nouvelle demande
-    const dateDebut = new Date(datedeb);
-    const dateFin = new Date(datefin);
-    let joursAbsence = 0;
+  return { valid: true };
+}
 
-    // Calcul des jours d'absence en fonction des règles spécifiées
-    if (dateDebut.getTime() === dateFin.getTime()) {
-      joursAbsence = duredebut === "journee" ? 1 : 0.5; // même jour, une journée entière ou demi-journée
-    } else {
-      const differenceEnJours = (dateFin - dateDebut) / (1000 * 60 * 60 * 24);
-      const joursComplet = differenceEnJours - 1; // nombre de jours complets entre les deux dates
-      const debutJournee = duredebut === "journee" ? 1 : 0.5; // durée date deb
-      const finJournee = durefin === "journee" ? 1 : 0.5; // durée de la dernière journée
-
-      joursAbsence = joursComplet + debutJournee + finJournee;
-    }
-
-    let totalJoursMois = 0;
-
-    // absence non special
-    if (absence.type !== "special") {
-      // calcul total des jours d'absence pour le mois en cours
-      const debutMois = new Date(
-        dateDebut.getFullYear(),
-        dateDebut.getMonth(),
-        1
-      );
-      const finMois = new Date(
-        dateDebut.getFullYear(),
-        dateDebut.getMonth() + 1,
-        0
-      );
-
-      // recherche des demandes d'absence du même employé et mois
-      const demandesMois = await Demande.findAll({
-        where: {
-          id_employe,
-          date_debut: {
-            [Op.between]: [debutMois, finMois],
-          },
-        },
-      });
-
-      // calcul total des jours d'absence pour le mois
-      totalJoursMois = demandesMois.reduce((total, d) => {
-        const debut = new Date(d.date_debut);
-        const fin = new Date(d.date_fin);
-        const dureDebut = d.duredebut === "journee" ? 1 : 0.5;
-        const dureFin = d.durefin === "journee" ? 1 : 0.5;
-        return (
-          total +
-          ((fin - debut) / (1000 * 60 * 60 * 24) - 1) +
-          dureDebut +
-          dureFin
-        );
-      }, 0);
-      // ajout jours d'absence
-      const totalAvecNouvelleDemande = totalJoursMois + joursAbsence;
-      // vérification si la demande dépasse la limite de 2,5 jours par mois
-
-      if (totalAvecNouvelleDemande > 2.5) {
-        const message =
-          totalJoursMois > 0
-            ? `La demande dépasse la limite de 2,5 jours par mois. Vous avez déjà pris ${totalJoursMois} jours ce mois-ci.`
-            : "La demande dépasse la limite de 2,5 jours par mois.";
-        return res.status(400).json({
-          error: message,
-        });
-      }
-      // maj le solde de l'employé
-
-      employe.solde_employe -= joursAbsence;
-      await employe.save();
-    }
-
-    if (absence.seulement_femmes && employe.sexe === "H") {
-      return res.status(400).json({ error: "Le congé est réservé aux femmes" });
-    }
-
-    // création demande d'absence
-    const demande = await Demande.create({
+async function doublons(id_employe, id_absence, dateDebut, dateFin) {
+  const existe = await Demande.findOne({
+    where: {
       id_employe,
       id_absence,
       date_debut: dateDebut,
       date_fin: dateFin,
-      duredebut,
-      durefin,
-      jours_absence: joursAbsence,
-    });
+    },
+  });
+  return existe;
+}
 
-    res.status(201).json({
-      demande,
-      message: `Demande créée avec succès. Jours d'absence pris: ${joursAbsence}.`,
-    });
+// Fonction pour calculer les jours d'absence en tenant compte des demi-journées
+function calculerJoursAbsence(dateDebut, dateFin, duredebut, durefin) {
+  const start = moment(dateDebut);
+  const end = moment(dateFin);
+
+  let totalDays = end.diff(start, "days") + 1; // Inclure le dernier jour
+  if (duredebut === "matin" && durefin === "apresmidi") {
+    totalDays -= 0.5; // Ajustement pour les demi-journées
+  } else if (duredebut === "matin" || durefin === "apresmidi") {
+    totalDays -= 0.5; // Ajustement pour les demi-journées
+  }
+
+  return totalDays;
+}
+
+// Création demande d'absence
+router.put("", async (req, res) => {
+  const { id_employe, id_absence, datedeb, jours_absence, duredebut, motif } =
+    req.body;
+
+  try {
+    // Validation du format de la date
+    const dateDebut = moment(datedeb, "YYYY-MM-DD", true);
+    if (!dateDebut.isValid()) {
+      return res
+        .status(400)
+        .json({ error: "La date de début fournie est invalide." });
+    }
+
+    const dateDebutJS = dateDebut.toDate();
+
+    // Vérifiez l'existence de l'absence et de l'employé
+    const absence = await Absence.findByPk(id_absence);
+    if (!absence) {
+      return res.status(404).json({ error: "Absence non trouvée" });
+    }
+
+    const employe = await Employe.findByPk(id_employe);
+    if (!employe) {
+      return res.status(404).json({ error: "Employé non trouvé" });
+    }
+    
+    // Vérification si l'absence est réservée aux femmes
+    if (absence.seulement_femmes && employe.sexe === "M") {
+      return res.status(400).json({ error: "Le congé est réservé aux femmes" });
+    }
+
+
+    if (absence.type === "special") {
+      // Gestion des absences spéciales
+      const validation = verificationchamp(
+        ["id_employe", "id_absence", "datedeb", "duredebut"],
+        req.body
+      );
+      if (!validation.valid) {
+        return res.status(400).json({ error: validation.error });
+      }
+
+      // Calculer la date de fin pour les absences spéciales
+      const joursAbsenceSpeciale = absence.duree;
+      const motifSpecial = absence.nom_absence;
+      const dateFin = moment(dateDebutJS)
+        .add(joursAbsenceSpeciale - 1, "days")
+        .toDate();
+      const durefin = joursAbsenceSpeciale > 1 ? "journee" : "matin";
+
+      // Vérification des doublons pour les absences spéciales
+      const exist = await doublons(
+        id_employe,
+        id_absence,
+        dateDebutJS,
+        dateFin
+      );
+      if (exist)
+        return res
+          .status(400)
+          .json({ error: "Une demande similaire existe déjà." });
+
+      // Créer la demande d'absence pour les absences spéciales
+      const nouvelleDemande = await Demande.create({
+        id_employe,
+        id_absence,
+        date_debut: dateDebutJS,
+        date_fin: dateFin,
+        date_demande: new Date(),
+        jours_absence: joursAbsenceSpeciale,
+        duredebut,
+        durefin,
+        motif: motifSpecial, // Automatiquement défini à partir du nom de l'absence
+      });
+
+      return res.status(201).json({
+        demandeSpeciale: nouvelleDemande,
+        message: "Demande spéciale créée avec succès.",
+      });
+    } else {
+      // Gestion des absences non spéciales
+      const validation = verificationchamp(
+        [
+          "id_employe",
+          "id_absence",
+          "datedeb",
+          "jours_absence",
+          "duredebut",
+          "motif",
+        ],
+        req.body
+      );
+      if (!validation.valid) {
+        return res.status(400).json({ error: validation.error });
+      }
+
+      const joursAbsence = parseFloat(jours_absence);
+      const motifSpecial = motif;
+      const dateFin = moment(dateDebutJS)
+        .add(joursAbsence - 1, "days")
+        .toDate();
+      let durefin = "journee";
+
+      // Déterminer `durefin` en fonction de `jours_absence` et `duredebut`
+      if (joursAbsence === 0.5) {
+        durefin = duredebut; // Si l'absence est une demi-journée, `durefin` est identique à `duredebut`
+      } else if (joursAbsence % 1 === 0) {
+        durefin = "journee"; // Absence en jours complets
+      } else {
+        durefin = jours_absence % 1 === 0.5 ? "apresmidi" : "matin"; // Gérer les demi-journées
+      }
+
+      // Calcul des dates du mois
+      const debutMois = new Date(
+        dateDebutJS.getFullYear(),
+        dateDebutJS.getMonth(),
+        1
+      );
+      const finMois = new Date(
+        dateDebutJS.getFullYear(),
+        dateDebutJS.getMonth() + 1,
+        0
+      );
+
+      // Obtenir les demandes pour le mois en cours
+      const demandesMois = await Demande.findAll({
+        where: {
+          id_employe,
+          date_debut: {
+            [Op.lte]: finMois,
+          },
+          date_fin: {
+            [Op.gte]: debutMois,
+          },
+        },
+        include: [
+          {
+            model: Absence,
+            as: "absence", // Spécifiez l'alias utilisé dans l'association
+            where: {
+              type: "non special", // Filtrer les absences non spéciales
+            },
+          },
+        ],
+      });
+
+      // Calculer le total des jours d'absence pour le mois en cours
+      const totalJoursMois = demandesMois.reduce((total, d) => {
+        return (
+          total +
+          calculerJoursAbsence(d.date_debut, d.date_fin, d.duredebut, d.durefin)
+        );
+      }, 0);
+
+      // Vérification si la demande dépasse la limite de 10 jours pour ce mois-ci
+      const totalAvecNouvelleDemande = totalJoursMois + joursAbsence;
+
+      if (totalAvecNouvelleDemande > 10) {
+        return res.status(400).json({
+          error: `La demande dépasse la limite de 10 jours pour ce mois-ci. Vous avez déjà pris ${totalJoursMois} jours ce mois-ci.`,
+        });
+      }
+
+      // Vérifier solde
+      // Exemple de code pour la mise à jour du solde
+      const joursDemande = parseFloat(req.body.jours_absence); // Renommé pour éviter les conflits
+      const employe = await Employe.findByPk(id_employe);
+
+      if (!employe) {
+        return res.status(404).json({ error: "Employé non trouvé" });
+      }
+
+      // Vérifiez si le solde est suffisant pour la demande
+      if (employe.solde_employe < joursDemande) {
+        return res
+          .status(400)
+          .json({ error: "Solde insuffisant pour prendre ce congé." });
+      }
+
+      // Soustrayez les jours d'absence du solde de l'employé
+      employe.solde_employe -= joursDemande;
+
+      // Sauvegardez la mise à jour
+      await employe.save();
+
+      // Vérification des doublons pour les absences non spéciales
+      const exist = await doublons(
+        id_employe,
+        id_absence,
+        dateDebutJS,
+        dateFin
+      );
+      if (exist)
+        return res
+          .status(400)
+          .json({ error: "Une demande similaire existe déjà." });
+
+      // Créer la demande d'absence pour les absences non spéciales
+      const nouvelleDemande = await Demande.create({
+        id_employe,
+        id_absence,
+        date_debut: dateDebutJS,
+        date_fin: dateFin,
+        date_demande: new Date(),
+        jours_absence,
+        duredebut,
+        durefin,
+        motif: motifSpecial,
+      });
+
+      return res.status(201).json({
+        demandeNonSpeciale: nouvelleDemande,
+        message: "Demande non spéciale créée avec succès.",
+      });
+    }
   } catch (error) {
-    console.error("Erreur de serveur:", error);
-    res
-      .status(500)
-      .json({ error: "Une erreur s'est produite.", details: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
-
 module.exports = router;

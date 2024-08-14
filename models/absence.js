@@ -14,10 +14,11 @@ const Absence = DB.define('Absence',{
         type:DataTypes.STRING,
         allowNull:false,
     },
-    duree:{
-        type:DataTypes.INTEGER(10),
-        allowNull:false,
-    },
+    duree: {
+      type: DataTypes.DECIMAL(10, 1),
+      allowNull: true,
+      defaultValue:0.0
+  },
     type: {
       type: DataTypes.STRING,
       allowNull: false,
