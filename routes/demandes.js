@@ -43,11 +43,11 @@ function calculerJoursAbsence(dateDebut, dateFin, duredebut, durefin) {
   const start = moment(dateDebut);
   const end = moment(dateFin);
 
-  let totalDays = end.diff(start, "days") + 1; // Inclure le dernier jour
+  let totalDays = end.diff(start, "days") + 1; 
   if (duredebut === "matin" && durefin === "apresmidi") {
-    totalDays -= 0.5; // Ajustement pour les demi-journées
+    totalDays -= 0.5;
   } else if (duredebut === "matin" || durefin === "apresmidi") {
-    totalDays -= 0.5; // Ajustement pour les demi-journées
+    totalDays -= 0.5; 
   }
 
   return totalDays;
@@ -59,7 +59,6 @@ router.put("", async (req, res) => {
     req.body;
 
   try {
-    // Validation du format de la date
     const dateDebut = moment(datedeb, "YYYY-MM-DD", true);
     if (!dateDebut.isValid()) {
       return res
@@ -75,7 +74,7 @@ router.put("", async (req, res) => {
       return res.status(404).json({ error: "Absence non trouvée" });
     }
 
-    const employe = await Employe.findByPk(id_employe);
+    let employe = await Employe.findByPk(id_employe);
     if (!employe) {
       return res.status(404).json({ error: "Employé non trouvé" });
     }
@@ -87,7 +86,6 @@ router.put("", async (req, res) => {
 
 
     if (absence.type === "special") {
-      // Gestion des absences spéciales
       const validation = verificationchamp(
         ["id_employe", "id_absence", "datedeb", "duredebut"],
         req.body
@@ -96,7 +94,6 @@ router.put("", async (req, res) => {
         return res.status(400).json({ error: validation.error });
       }
 
-      // Calculer la date de fin pour les absences spéciales
       const joursAbsenceSpeciale = absence.duree;
       const motifSpecial = absence.nom_absence;
       const dateFin = moment(dateDebutJS)
@@ -104,7 +101,6 @@ router.put("", async (req, res) => {
         .toDate();
       const durefin = joursAbsenceSpeciale > 1 ? "journee" : "matin";
 
-      // Vérification des doublons pour les absences spéciales
       const exist = await doublons(
         id_employe,
         id_absence,
@@ -116,7 +112,6 @@ router.put("", async (req, res) => {
           .status(400)
           .json({ error: "Une demande similaire existe déjà." });
 
-      // Créer la demande d'absence pour les absences spéciales
       const nouvelleDemande = await Demande.create({
         id_employe,
         id_absence,
@@ -126,7 +121,7 @@ router.put("", async (req, res) => {
         jours_absence: joursAbsenceSpeciale,
         duredebut,
         durefin,
-        motif: motifSpecial, // Automatiquement défini à partir du nom de l'absence
+        motif: motifSpecial, 
       });
 
       return res.status(201).json({
@@ -134,7 +129,6 @@ router.put("", async (req, res) => {
         message: "Demande spéciale créée avec succès.",
       });
     } else {
-      // Gestion des absences non spéciales
       const validation = verificationchamp(
         [
           "id_employe",
@@ -159,11 +153,11 @@ router.put("", async (req, res) => {
 
       // Déterminer `durefin` en fonction de `jours_absence` et `duredebut`
       if (joursAbsence === 0.5) {
-        durefin = duredebut; // Si l'absence est une demi-journée, `durefin` est identique à `duredebut`
+        durefin = duredebut; 
       } else if (joursAbsence % 1 === 0) {
-        durefin = "journee"; // Absence en jours complets
+        durefin = "journee"; 
       } else {
-        durefin = jours_absence % 1 === 0.5 ? "apresmidi" : "matin"; // Gérer les demi-journées
+        durefin = jours_absence % 1 === 0.5 ? "apresmidi" : "matin"; 
       }
 
       // Calcul des dates du mois
@@ -192,54 +186,57 @@ router.put("", async (req, res) => {
         include: [
           {
             model: Absence,
-            as: "absence", // Spécifiez l'alias utilisé dans l'association
+            as: "absence", 
             where: {
-              type: "non special", // Filtrer les absences non spéciales
+              type: "non special", 
             },
           },
         ],
       });
 
-      // Calculer le total des jours d'absence pour le mois en cours
       const totalJoursMois = demandesMois.reduce((total, d) => {
         return (
           total +
           calculerJoursAbsence(d.date_debut, d.date_fin, d.duredebut, d.durefin)
         );
       }, 0);
-
-      // Vérification si la demande dépasse la limite de 10 jours pour ce mois-ci
       const totalAvecNouvelleDemande = totalJoursMois + joursAbsence;
-
-      if (totalAvecNouvelleDemande > 10) {
-        return res.status(400).json({
-          error: `La demande dépasse la limite de 10 jours pour ce mois-ci. Vous avez déjà pris ${totalJoursMois} jours ce mois-ci.`,
-        });
+      if (employe.plafonnementbolean) {
+        
+        
+        if (totalAvecNouvelleDemande > employe.plafonnement) {
+          return res.status(400).json({
+            error: `Votre demande ne peut pas depasser de ${employe.plafonnement} jours pour ce mois-ci. Vous avez déjà pris ${totalJoursMois} jours ce mois-ci.`,
+          });
+        }
+      } else {
+      
+       
+        
+        if (totalAvecNouvelleDemande > 10) {
+          return res.status(400).json({
+            error: `La demande dépasse la limite de 10 jours pour ce mois-ci. Vous avez déjà pris ${totalJoursMois} jours ce mois-ci.`,
+          });
+        }
       }
-
+      
       // Vérifier solde
-      // Exemple de code pour la mise à jour du solde
-      const joursDemande = parseFloat(req.body.jours_absence); // Renommé pour éviter les conflits
-      const employe = await Employe.findByPk(id_employe);
+      const joursDemande = parseFloat(req.body.jours_absence); 
 
       if (!employe) {
         return res.status(404).json({ error: "Employé non trouvé" });
       }
 
-      // Vérifiez si le solde est suffisant pour la demande
       if (employe.solde_employe < joursDemande) {
         return res
           .status(400)
           .json({ error: "Solde insuffisant pour prendre ce congé." });
       }
 
-      // Soustrayez les jours d'absence du solde de l'employé
       employe.solde_employe -= joursDemande;
 
-      // Sauvegardez la mise à jour
       await employe.save();
 
-      // Vérification des doublons pour les absences non spéciales
       const exist = await doublons(
         id_employe,
         id_absence,
@@ -251,7 +248,6 @@ router.put("", async (req, res) => {
           .status(400)
           .json({ error: "Une demande similaire existe déjà." });
 
-      // Créer la demande d'absence pour les absences non spéciales
       const nouvelleDemande = await Demande.create({
         id_employe,
         id_absence,

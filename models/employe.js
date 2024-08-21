@@ -30,7 +30,15 @@ const Employe = DB.define('Employe', {
         type: DataTypes.DECIMAL(10, 1),
         allowNull: true,
         defaultValue:0.0
-    }
+    },
+    plafonnement: {
+        type: DataTypes.FLOAT,
+        allowNull: true, // Peut être null si aucun plafonnement spécifique
+      },
+      plafonnementbolean: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true, // Peut être null si le plafonnement n'est pas appliqué
+      }
 });
 sequelize.sync()
 
