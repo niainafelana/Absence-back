@@ -29,7 +29,7 @@ router.put('', async (req, res) => {
 
 
   //Récupération tous les employés triés par date de création la plus récente
-router.get("", async (req, res) => {
+router.get("/listetable", async (req, res) => {
     try {
         const employes = await Employe.findAll({
             order: [["createdAt", "DESC"]],
@@ -42,9 +42,8 @@ router.get("", async (req, res) => {
     }
 });
 
-
 //Recherche par id(lib_employé)
-router.get('/:id', async (req, res) => {
+router.get('/search/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -62,7 +61,7 @@ router.get('/:id', async (req, res) => {
 
 
 // Modification des employés par id
-router.patch('/:id', async (req, res) => {
+router.patch('/modife/:id', async (req, res) => {
   const { id } = req.params;
   const { nom, prenom, sexe, motif, plafonnement, plafonnementbolean } = req.body;
 
@@ -88,7 +87,7 @@ router.patch('/:id', async (req, res) => {
   }
 });
 //effacer un employé a l'aide de leur id si necessaire
-router.delete('/:id', async (req, res) => {
+router.delete('/delete/:id', async (req, res) => {
   try {
     const employe = await Employe.findByPk(req.params.id);
     if (!employe) {
@@ -115,7 +114,17 @@ cron.schedule('*/1 * * * *', async () => { // Toutes les minutes pour le test
   }
 });
 
-
-
+/**pour faire dataliste sur le champ employe*/
+router.get('/dataliste', async (req, res) => {
+  try {
+    const employes = await Employe.findAll({
+      attributes: ['id_employe', 'nom_employe', 'pre_employe'], // Sélectionner uniquement les champs nécessaires
+    });
+    res.json(employes);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des employés:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
 
 module.exports = router;

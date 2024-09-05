@@ -35,6 +35,10 @@ const Demande = DB.define('Demande',{
         type: DataTypes.DATE,
         allowNull: false
       },
+      date_retour: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
       date_demande: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW,
