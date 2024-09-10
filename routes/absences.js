@@ -3,25 +3,37 @@ const Absence = require('../models/absence');
 const cron = require('node-cron');
 let router = express.Router()
 
+function determinerPour(duree) {
+  // Convertir 'duree' en nombre pour éviter les problèmes de type
+  const dureeNombre = Number(duree);
+  return dureeNombre === 0;
+}
 
-router.put('', (req, res) => {
-    const {name, duree,type, femme  } = req.body;
-    
-    if (!name || !duree || !type || !femme) {
+router.put('/ajout', async (req, res) => {
+  const { name, duree, type } = req.body;
+
+  // Validation des données reçues
+  if (!name || duree === undefined || !type) {
       return res.status(400).json({ message: 'Donnée manquer' });
-    }
-    
-    Absence.create({
-      nom_absence: name,
-      duree: duree,
-      type:type,
-      seulement_femmes: femme,
-    })
-    .then(absence => res.json({ message: 'Absence bien créé', data: absence }))
-    .catch(err => res.status(500).json({ message: 'db error', error: err }));
-  });
+  }
 
-  
+  // Déterminer la valeur de 'pour' en fonction de 'duree'
+  const pour = determinerPour(duree);
+  try {
+      // Création de la nouvelle absence dans la base de données
+      const absence = await Absence.create({
+          nom_absence: name,
+          duree: duree,
+          type: type,
+          pour: pour // Ajouter 'pour' avec la valeur déterminée
+      });
+      // Réponse en cas de succès
+      res.json({ message: 'Absence bien créé', data: absence });
+  } catch (err) {
+      // Réponse en cas d'erreur
+      res.status(500).json({ message: 'Erreur de base de données', error: err });
+  }
+});
 // Route GET pour récupérer la liste des absences
 router.get('/recup/:id', async (req, res) => {
   try {

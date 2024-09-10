@@ -15,15 +15,15 @@ const Absence = DB.define('Absence',{
         allowNull:false,
     },
     duree: {
-      type: DataTypes.DECIMAL(10, 1),
+      type: DataTypes.INTEGER,
       allowNull: true,
       defaultValue:0.0
   },
     type: {
       type: DataTypes.STRING,
-      allowNull: false,
+      defaultValue: false,
     },
-    seulement_femmes: {
+    pour: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     }

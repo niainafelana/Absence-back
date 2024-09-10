@@ -27,7 +27,7 @@ const Employe = DB.define('Employe', {
         allowNull: false
     },
     solde_employe: {
-        type: DataTypes.DECIMAL(10, 1),
+        type: DataTypes.FLOAT,
         allowNull: true,
         defaultValue:0.0
     },

@@ -6,12 +6,13 @@ const { Op } = require("sequelize");
 const router = express.Router();
 const moment = require("moment");
 
+
 //fonction pour calculer dateretour
 function calculerDateRetour(dateFin, durefin, duredebut, dateDebutJS) {
   let dateRetour = moment(dateFin);
-  let dateDebutMoment = moment(dateDebutJS); // Assurez-vous que datedebutJS est bien une date valide
+
   // si dateDebut et dateFin sont le même jour
-  if (dateDebutMoment.isSame(dateFin, "day")) {
+  if (dateDebutJS.isSame(dateFin, "day")) {
     if (duredebut === "matin" && durefin === "matin") {
       dateRetour;
     } else if (duredebut === "apresmidi" && durefin === "apresmidi") {
@@ -29,16 +30,15 @@ function calculerDateRetour(dateFin, durefin, duredebut, dateDebutJS) {
   }
 
   //si dateRetour tombe un week-end
-  if (dateRetour.isoWeekday() === 6) {
-    // Samedi
+  if (dateRetour.isoWeekday() === 6) { // Samedi
     dateRetour.add(2, "days").set({ hour: 9, minute: 0 });
-  } else if (dateRetour.isoWeekday() === 7) {
-    // Dimanche
+  } else if (dateRetour.isoWeekday() === 7) { // Dimanche
     dateRetour.add(1, "days").set({ hour: 9, minute: 0 });
   }
 
   return dateRetour.toDate();
 }
+
 
 //fonction pour trouver durefin(matin ou apresmidi)
 function determinerDurefin(jours_absence, duredebut) {
@@ -73,6 +73,7 @@ function determinerDurefin(jours_absence, duredebut) {
 
   return durefin;
 }
+
 
 async function doublons(id_employe, id_absence, dateDebut, dateFin) {
   const existe = await Demande.findOne({
@@ -114,7 +115,7 @@ router.put("/ajout", async (req, res) => {
         .json({ error: "La date de début fournie est invalide." });
     }
 
-    let dateDebutJS = dateDebut.toDate();
+    const dateDebutJS = dateDebut.toDate();
 
     // Vérifiez l'existence de l'absence et de l'employé
     let absence = await Absence.findByPk(id_absence);
@@ -127,22 +128,39 @@ router.put("/ajout", async (req, res) => {
       return res.status(404).json({ error: "Employé non trouvé" });
     }
 
-    // Vérifier que le type d'absence est compatible avec le sexe
-    if (absence.nom_absence === 'maternite' && employe.sexe !== 'F') {
-      return res.status(400).json({ message: "Un homme ne peut pas avoir un congé de maternité" });
-  }
+    // Vérification si l'absence est réservée aux femmes
+    if (absence.type && employe.sexe === "M") {
+      return res.status(400).json({ error: "Le congé est réservé aux femmes" });
+    }
 
-  if (absence.nom_absence === 'paternite' && employe.sexe !== 'M') {
-      return res.status(400).json({ message: "Une femme ne peut pas avoir un congé de paternité" });
-  }
-    if (absence.pour == 0) {
+    if (absence.pour === 0) {
       const motifSpecial = absence.nom_absence;
-      const joursAbsenceSpecial = absence.duree; //duree avy any @ bd
-      const joursAbsenceSaisis = parseFloat(jours_absence); //avy @ body
+      const dateFin = moment(dateDebutJS)
+        .add(joursAbsenceSaisis - 1, "days")
+        .toDate();
+      const durefin = determinerDurefin(joursAbsenceSaisis, duredebut);
 
-      // Vérifiez les valeurs calculées
-      console.log("joursAbsenceSaisis:", joursAbsenceSaisis);
-      console.log("joursAbsenceSpecial:", joursAbsenceSpecial);
+      
+      const exist = await doublons(
+        id_employe,
+        id_absence,
+        dateDebutJS,
+        dateFin
+      );
+      if (exist)
+        return res
+          .status(400)
+          .json({ error: "Une demande similaire existe déjà." });
+
+      
+
+      const joursAbsenceSpecial = absence.duree; // Durée définie dans la BD pour ce type d'absence
+      const joursAbsenceSaisis = parseFloat(jours_absence);
+
+
+  // Vérifiez les valeurs calculées
+  console.log('joursAbsenceSaisis:', joursAbsenceSaisis);
+  console.log('joursAbsenceSpecial:', joursAbsenceSpecial);
 
       // Vérifier si la durée saisie dépasse la durée de l'absence spéciale
       if (joursAbsenceSaisis > joursAbsenceSpecial) {
@@ -177,7 +195,7 @@ router.put("/ajout", async (req, res) => {
               model: Absence,
               as: "absence",
               where: {
-                pour: 1,
+                pour:1,
               },
             },
           ],
@@ -185,59 +203,38 @@ router.put("/ajout", async (req, res) => {
         const totalJoursMois = demandesMois.reduce((total, d) => {
           return (
             total +
-            calculerJoursAbsence(
-              d.date_debut,
-              d.date_fin,
-              d.duredebut,
-              d.durefin
-            )
+            calculerJoursAbsence(d.date_debut, d.date_fin, d.duredebut, d.durefin)
           );
         }, 0);
 
+        
         const totalAvecNouvelleDemande = totalJoursMois + difference;
-        if (
-          employe.plafonnementbolean &&
-          totalAvecNouvelleDemande > employe.plafonnement
-        ) {
+        if (employe.plafonnementbolean && totalAvecNouvelleDemande > employe.plafonnement) {
           return res.status(400).json({
             error: `Votre demande ne peut pas dépasser de ${employe.plafonnement} jours pour ce mois-ci. Vous avez déjà pris ${totalJoursMois} jours ce mois-ci.`,
           });
         }
-        if (employe.solde_employe < difference) {
-          return res
-            .status(400)
-            .json({ error: "Solde insuffisant pour prendre ce congé." });
-        }
-  
-        employe.solde_employe -= difference;
-  
-        await employe.save();
-  
-      }
+        
+      } 
 
       // Vérifier solde
- const dateFin = moment(dateDebutJS)
-        .add(joursAbsenceSaisis - 1, "days")
-        .toDate();
-      const durefin = determinerDurefin(joursAbsenceSaisis, duredebut);
-      
-            const dateRetour = calculerDateRetour(
+
+
+      if (employe.solde_employe < difference) {
+        return res
+          .status(400)
+          .json({ error: "Solde insuffisant pour prendre ce congé." });
+      }
+
+      employe.solde_employe -= difference;
+
+      await employe.save();
+      const dateRetour = calculerDateRetour(
         dateFin,
         durefin,
         duredebut,
         dateDebutJS
       );
-      const exist = await doublons(
-        id_employe,
-        id_absence,
-        dateDebutJS,
-        dateFin
-      );
-      if (exist)
-        return res
-          .status(400)
-          .json({ error: "Une demande similaire existe déjà." });
-
       const nouvelleDemande = await Demande.create({
         id_employe,
         id_absence,
@@ -251,10 +248,7 @@ router.put("/ajout", async (req, res) => {
         motif: motifSpecial,
       });
 
-      return res.status(201).json({
-        demandeSpeciale: nouvelleDemande,
-        message: "Demande spéciale créée avec succès.",
-      });
+      console.log(nouvelleDemande);
     } else {
       const joursAbsence = parseFloat(jours_absence);
       const motifSpecial = motif;
@@ -380,37 +374,29 @@ router.put("/ajout", async (req, res) => {
   }
 });
 
-router.get("/tabledemande", async (req, res) => {
+
+router.get('/tabledemande', async (req, res) => {
   try {
     const demandes = await Demande.findAll({
       include: {
         model: Employe,
-        as: "employe", // Utiliser l'alias défini dans l'association
-        attributes: [
-          "nom_employe",
-          "pre_employe",
-          "motif_employe",
-          "solde_employe",
-        ], // Sélectionner seulement le nom et le prénom
+        as: 'employe', // Utiliser l'alias défini dans l'association
+        attributes: ['nom_employe', 'pre_employe', 'motif_employe', 'solde_employe'], // Sélectionner seulement le nom et le prénom
       },
       attributes: [
-        "date_debut",
-        "date_fin",
-        "date_retour",
-        "motif",
-        "jours_absence",
+        'date_debut',
+        'date_fin',
+        'date_retour',
+        'motif',
+        'jours_absence',
       ],
-      order: [["createdAt", "DESC"]],
+      order: [['createdAt', 'DESC']],
     });
 
     res.status(200).json(demandes); // Envoyer les résultats en JSON
   } catch (error) {
-    console.error("Erreur lors de la récupération des demandes :", error);
-    res
-      .status(500)
-      .json({
-        error: "Une erreur est survenue lors de la récupération des demandes.",
-      });
+    console.error('Erreur lors de la récupération des demandes :', error);
+    res.status(500).json({ error: 'Une erreur est survenue lors de la récupération des demandes.' });
   }
 });
 

@@ -8,6 +8,7 @@ const db = require('./db');
 const Employe = require('./models/employe'); // Importer le modèle Employe
 const Absence = require('./models/absence');//Importation modèle Absence
 const Demande = require('./models/demande');//Importation modèle demande
+const Utilisateur = require('./models/utilisateur');//Importation modèle 
 /**initialisation de l'api */
 const app = express();
 app.use(cors());
