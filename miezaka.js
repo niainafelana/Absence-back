@@ -19,10 +19,12 @@ app.use(express.urlencoded({ extended: true }));
 const employe_router = require('./routes/employes');//importation route employe
 const demande_router =require('./routes/demandes');
 const  absence_router = require('./routes/absences');
+const utilisateur_router = require('./routes/utilisateurs');
 /****Mise en place du routage */
 app.use('/employes', employe_router); //les employés
 app.use('/demandes', demande_router);
 app.use('/absences', absence_router);
+app.use('/utile',utilisateur_router);
 /**Demarrer serveur avec test bd */
 (async () => {
     try {

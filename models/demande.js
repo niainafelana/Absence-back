@@ -64,6 +64,10 @@ const Demande = DB.define('Demande',{
         type: DataTypes.STRING,
         allowNull: false,
       },
+      surplus:{
+        type:DataTypes.FLOAT,
+        allowNull:true,
+      }
       
 });
 Demande.belongsTo(Employe, { foreignKey: 'id_employe', as: 'employe' });
