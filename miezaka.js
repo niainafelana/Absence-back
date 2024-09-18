@@ -15,6 +15,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+
+
+
 //Importation des routes
 const employe_router = require('./routes/employes');//importation route employe
 const demande_router =require('./routes/demandes');

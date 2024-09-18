@@ -2,7 +2,7 @@ const express = require("express");
 const Employe = require("../models/employe");
 const Demande = require("../models/demande");
 const Absence = require("../models/absence");
-const { Op } = require("sequelize");
+const { Op ,literal} = require("sequelize");
 const router = express.Router();
 const moment = require("moment");
 
@@ -131,16 +131,16 @@ router.put("/ajout", async (req, res) => {
     if (absence.nom_absence === "maternite" && employe.sexe !== "F") {
       return res
         .status(400)
-        .json({ message: "Un homme ne peut pas avoir un congé de maternité" });
+        .json({ error: "Un homme ne peut pas avoir un congé de maternité" });
     }
 
     if (absence.nom_absence === "paternite" && employe.sexe !== "M") {
       return res
         .status(400)
-        .json({ message: "Une femme ne peut pas avoir un congé de paternité" });
+        .json({ error: "Une femme ne peut pas avoir un congé de paternité" });
     }
     if (absence.pour == 0) {
-      let motifSpecial = absence.nom_absence;
+      let motifSpecial = motif;
       let joursAbsenceSpecial = absence.duree; //duree avy any @ bd
       let joursAbsenceSaisis = parseFloat(jours_absence); //avy @ body
 
@@ -278,15 +278,14 @@ router.put("/ajout", async (req, res) => {
           totalAvecNouvelleDemande > employe.plafonnement
         ) {
           return res.status(400).json({
+            "code": "ERR_CONGE_LIMIT",
             error: `Votre demande ne peut pas depasser de ${employe.plafonnement} jours pour ce mois-ci. Vous avez déjà pris ${moisjour} jours ce mois-ci.Le nombre de jours restants que vous pouvez encore prendre ce mois-ci est de ${restant}`,
           });
         }
         if (employe.solde_employe < difference) {
-          return res
-            .status(400)
-            .json({
-              error: `Solde insuffisant pour prendre ce congé. Votre solde est ${employe.solde_employe} jours.`,
-            });
+          return res.status(400).json({
+            error: `Solde insuffisant pour prendre ce congé. Votre solde est ${employe.solde_employe} jours.`,
+          });
         }
 
         employe.solde_employe -= difference;
@@ -419,6 +418,7 @@ router.put("/ajout", async (req, res) => {
       if (employe.plafonnementbolean) {
         if (totalAvecNouvelleDemande > employe.plafonnement) {
           return res.status(400).json({
+            "code": "ERR_CONGE_LIMIT",
             error: `Votre demande ne peut pas depasser de ${employe.plafonnement} jours pour ce mois-ci. Vous avez déjà pris ${moisjour} jours ce mois-ci.Le nombre de jours restants que vous pouvez encore prendre ce mois-ci est de ${restant}`,
           });
         }
@@ -513,5 +513,50 @@ router.get("/tabledemande", async (req, res) => {
     });
   }
 });
+
+
+//recherche sur le tableau filtrage
+router.get("/filtrage", async (req, res) => {
+  const { recherche = '', mois = null, annee = null } = req.query;
+  try {
+      const employeConditions = {
+          [Op.or]: [
+              { nom_employe: { [Op.like]: `%${recherche}%` } },
+              { pre_employe: { [Op.like]: `%${recherche}%` } }
+          ]
+      };
+
+      const demandeConditions = {};
+      if (mois && annee) {
+          demandeConditions[Op.and] = [
+              literal(`MONTH(date_debut) = ${parseInt(mois, 10)}`),
+              literal(`YEAR(date_debut) = ${parseInt(annee, 10)}`)
+          ];
+      } else if (mois) {
+          demandeConditions[Op.and] = [
+              literal(`MONTH(date_debut) = ${parseInt(mois, 10)}`)
+          ];
+      } else if (annee) {
+          demandeConditions[Op.and] = [
+              literal(`YEAR(date_debut) = ${parseInt(annee, 10)}`)
+          ];
+      }
+      const demandes = await Demande.findAll({
+          where: demandeConditions,
+          include: [
+              {
+                  model: Employe,
+                  as: 'employe',
+                  where: employeConditions
+              }
+          ]
+      });
+      res.json(demandes);
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Une erreur est survenue lors de la recherche des demandes.' });
+  }
+});
+
 
 module.exports = router;

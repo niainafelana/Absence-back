@@ -100,6 +100,7 @@ router.delete('/delete/:id', async (req, res) => {
     res.status(500).json({ error: 'Erreur lors de la suppression de l\'employé.' });
   }
 });
+
 //agmentation du solde des employés
 cron.schedule('*/1 * * * *', async () => { // Toutes les minutes pour le test
   try {
@@ -113,7 +114,6 @@ cron.schedule('*/1 * * * *', async () => { // Toutes les minutes pour le test
     console.error('Erreur :', error);
   }
 });
-
 /**pour faire dataliste sur le champ employe*/
 router.get('/dataliste', async (req, res) => {
   try {

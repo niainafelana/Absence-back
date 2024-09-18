@@ -74,6 +74,7 @@ Demande.belongsTo(Employe, { foreignKey: 'id_employe', as: 'employe' });
 Demande.belongsTo(Absence, { foreignKey: 'id_absence', as: 'absence' });
 Employe.hasMany(Demande, { foreignKey: 'id_employe', as: 'demandes' });
 Absence.hasMany(Demande, { foreignKey: 'id_absence', as: 'demandes' });
+
 sequelize.sync()
 
 module.exports= Demande;

@@ -53,7 +53,7 @@ router.get('/recup/:id', async (req, res) => {
 router.get('/dataliste', async (req, res) => {
   try {
     const absences = await Absence.findAll({
-      attributes: ['id_absence', 'nom_absence', 'type'], // Sélectionner uniquement les champs nécessaires
+      attributes: ['id_absence', 'nom_absence', 'type','duree','pour'], // Sélectionner uniquement les champs nécessaires
     });
     res.json(absences);
   } catch (error) {
