@@ -8,19 +8,16 @@ const Utilisateur = DB.define("Utilisateur", {
     autoIncrement: true,
     allowNull: false,
   },
+  nom_user: {
+    type: DataTypes.STRING(250),
+    allowNull: false,
+  },
   email: {
     type: DataTypes.STRING(100),
     primaryKey: true,
     allowNull: false,
   },
-  nom_user: {
-    type: DataTypes.STRING(250),
-    allowNull: false,
-  },
-  pre_user: {
-    type: DataTypes.STRING(250),
-    allowNull: true,
-  },
+ 
   role:{
     type:DataTypes.STRING(250),
     allowNull:false
