@@ -4,11 +4,10 @@ const Utilisateur = require('../models/utilisateur');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS, 10);
-const jwtSecret = process.env.JWT_SECRET;
-const jwtExpiresIn = process.env.JWT_EXPIRES_IN;
-
+const  checkRole = require('../jsontokenweb/chekrole');
+const checktokenmiddlware = require('../jsontokenweb/check');
 //ajout utilisateur
-router.post('/ajout', (req, res) => {
+router.post('/ajout', checktokenmiddlware, checkRole(['admin']),(req, res) => {
   const { nom, role, email, mdp } = req.body;
 
   if (!nom || !role || !email || !mdp) {
@@ -77,5 +76,16 @@ router.post('/login', (req, res) => {
       res.status(500).json({ message: 'Erreur serveur', error: error.message });
     });
 });
-
+router.get("/lisitra", checktokenmiddlware, checkRole(['utilisateur']),async (req, res) => {
+  try {
+      const utile = await Utilisateur.findAll({
+          order: [["createdAt", "DESC"]],
+      });
+      res.json({ message: "Liste des employés", data: utile });
+  } catch (err) {
+      res
+          .status(500)
+          .json({ message: "Erreur de la base de données", error: err });
+  }
+});
 module.exports = router;

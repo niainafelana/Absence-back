@@ -5,7 +5,8 @@ const Absence = require("../models/absence");
 const { Op ,literal} = require("sequelize");
 const router = express.Router();
 const moment = require("moment");
-
+const  checkRole = require('../jsontokenweb/chekrole'); // Si dans le même fichier
+const checktokenmiddlware = require('../jsontokenweb/check');
 //fonction pour calculer dateretour
 function calculerDateRetour(dateFin, durefin, duredebut, dateDebutJS) {
   let dateRetour = moment(dateFin);
@@ -102,7 +103,7 @@ function calculerJoursAbsence(dateDebut, dateFin, duredebut, durefin) {
 }
 
 // Création demande d'absence
-router.put("/ajout", async (req, res) => {
+router.put("/ajout",checktokenmiddlware, checkRole(['admin','utilisateur']), async (req, res) => {
   const { id_employe, id_absence, datedeb, jours_absence, duredebut, motif } =
     req.body;
 
@@ -482,7 +483,7 @@ router.put("/ajout", async (req, res) => {
   }
 });
 
-router.get("/tabledemande", async (req, res) => {
+router.get("/tabledemande", checktokenmiddlware, checkRole(['admin','utilisateur']),async (req, res) => {
   try {
     const demandes = await Demande.findAll({
       include: {
@@ -516,7 +517,7 @@ router.get("/tabledemande", async (req, res) => {
 
 
 //recherche sur le tableau filtrage
-router.get("/filtrage", async (req, res) => {
+router.get("/filtrage",checktokenmiddlware, checkRole(['admin','utilisateur']), async (req, res) => {
   const { recherche = '', mois = null, annee = null } = req.query;
   try {
       const employeConditions = {

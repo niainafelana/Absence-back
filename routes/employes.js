@@ -2,9 +2,10 @@ const express = require('express');
 const Employe = require('../models/employe');
 const cron = require('node-cron');
 let router = express.Router()
-
+const  checkRole = require('../jsontokenweb/chekrole'); // Si dans le même fichier
+const checktokenmiddlware = require('../jsontokenweb/check');
 //Ajout employer dans le bd
-router.put('', async (req, res) => {
+router.put('',checktokenmiddlware, checkRole(['admin','utilisateur']), async (req, res) => {
   const { nom, prenom, sexe, motif, plafonnement, plafonnementbolean } = req.body;
 
   if (!nom || !prenom || !sexe || !motif) {
@@ -26,10 +27,10 @@ router.put('', async (req, res) => {
     res.status(500).json({ message: 'Erreur de la base de données', error: err });
   }
 });
-
+ 
 
   //Récupération tous les employés triés par date de création la plus récente
-router.get("/listetable", async (req, res) => {
+router.get("/listetable", checktokenmiddlware, checkRole(['admin','utilisateur']),async (req, res) => {
     try {
         const employes = await Employe.findAll({
             order: [["createdAt", "DESC"]],
@@ -43,7 +44,7 @@ router.get("/listetable", async (req, res) => {
 });
 
 //Recherche par id(lib_employé)
-router.get('/search/:id', async (req, res) => {
+router.get('/search/:id', checktokenmiddlware, checkRole(['admin','utilisateur']),async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -61,7 +62,7 @@ router.get('/search/:id', async (req, res) => {
 
 
 // Modification des employés par id
-router.patch('/modife/:id', async (req, res) => {
+router.patch('/modife/:id', checktokenmiddlware, checkRole(['admin']),async (req, res) => {
   const { id } = req.params;
   const { nom, prenom, sexe, motif, plafonnement, plafonnementbolean } = req.body;
 
@@ -87,7 +88,7 @@ router.patch('/modife/:id', async (req, res) => {
   }
 });
 //effacer un employé a l'aide de leur id si necessaire
-router.delete('/delete/:id', async (req, res) => {
+router.delete('/delete/:id',checktokenmiddlware, checkRole(['admin']), async (req, res) => {
   try {
     const employe = await Employe.findByPk(req.params.id);
     if (!employe) {
@@ -114,8 +115,9 @@ cron.schedule('*/1 * * * *', async () => { // Toutes les minutes pour le test
     console.error('Erreur :', error);
   }
 });
+
 /**pour faire dataliste sur le champ employe*/
-router.get('/dataliste', async (req, res) => {
+router.get('/dataliste',checktokenmiddlware, checkRole(['admin','utilisateur']), async (req, res) => {
   try {
     const employes = await Employe.findAll({
       attributes: ['id_employe', 'nom_employe', 'pre_employe'], // Sélectionner uniquement les champs nécessaires
