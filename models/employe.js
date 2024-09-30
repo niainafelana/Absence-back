@@ -38,7 +38,11 @@ const Employe = DB.define('Employe', {
       plafonnementbolean: {
         type: DataTypes.BOOLEAN,
         allowNull: true, // Peut être null si le plafonnement n'est pas appliqué
-      }
+      },
+      last_solde_update: {
+        type: DataTypes.DATE, // Enregistre la dernière date de mise à jour
+        allowNull: true
+    }
 });
 sequelize.sync()
 

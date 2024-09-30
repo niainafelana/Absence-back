@@ -103,7 +103,7 @@ function calculerJoursAbsence(dateDebut, dateFin, duredebut, durefin) {
 }
 
 // Création demande d'absence
-router.put("/ajout",checktokenmiddlware, checkRole(['admin','utilisateur']), async (req, res) => {
+router.put("/ajout",checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']), async (req, res) => {
   const { id_employe, id_absence, datedeb, jours_absence, duredebut, motif } =
     req.body;
 
@@ -483,7 +483,7 @@ router.put("/ajout",checktokenmiddlware, checkRole(['admin','utilisateur']), asy
   }
 });
 
-router.get("/tabledemande", checktokenmiddlware, checkRole(['admin','utilisateur']),async (req, res) => {
+router.get("/tabledemande", checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']),async (req, res) => {
   try {
     const demandes = await Demande.findAll({
       include: {
@@ -517,9 +517,11 @@ router.get("/tabledemande", checktokenmiddlware, checkRole(['admin','utilisateur
 
 
 //recherche sur le tableau filtrage
-router.get("/filtrage",checktokenmiddlware, checkRole(['admin','utilisateur']), async (req, res) => {
-  const { recherche = '', mois = null, annee = null } = req.query;
+router.get("/filtrage", checktokenmiddlware, checkRole(['ADMINISTRATEUR', 'UTILISATEUR']), async (req, res) => {
+  const { recherche = '', mois = null, annee = null, date_debut = null, date_fin = null } = req.query;
+
   try {
+      // Conditions de recherche pour le nom ou le prénom de l'employé
       const employeConditions = {
           [Op.or]: [
               { nom_employe: { [Op.like]: `%${recherche}%` } },
@@ -528,6 +530,8 @@ router.get("/filtrage",checktokenmiddlware, checkRole(['admin','utilisateur']), 
       };
 
       const demandeConditions = {};
+
+      // Recherche par mois et année
       if (mois && annee) {
           demandeConditions[Op.and] = [
               literal(`MONTH(date_debut) = ${parseInt(mois, 10)}`),
@@ -542,6 +546,27 @@ router.get("/filtrage",checktokenmiddlware, checkRole(['admin','utilisateur']), 
               literal(`YEAR(date_debut) = ${parseInt(annee, 10)}`)
           ];
       }
+
+      // Recherche par plage de dates
+      if (date_debut && date_fin) {
+          // Recherche des demandes dont la date_debut est entre date_debut et date_fin
+          demandeConditions.date_debut = {
+              [Op.between]: [
+                  new Date(date_debut).setHours(0, 0, 0, 0),  // Début de la première date
+                  new Date(date_fin).setHours(23, 59, 59, 999)  // Fin de la dernière date
+              ]
+          };
+      } else if (date_debut) {
+          // Recherche des demandes dont la date_debut est exactement à date_debut (même jour, toutes heures)
+          demandeConditions.date_debut = {
+              [Op.between]: [
+                  new Date(date_debut).setHours(0, 0, 0, 0),  // Début de la journée
+                  new Date(date_debut).setHours(23, 59, 59, 999)  // Fin de la journée
+              ]
+          };
+      }
+
+      // Requête pour récupérer les demandes d'absence avec les conditions d'employé et de demande
       const demandes = await Demande.findAll({
           where: demandeConditions,
           include: [
@@ -552,12 +577,14 @@ router.get("/filtrage",checktokenmiddlware, checkRole(['admin','utilisateur']), 
               }
           ]
       });
+
       res.json(demandes);
   } catch (error) {
       console.error(error);
       res.status(500).json({ error: 'Une erreur est survenue lors de la recherche des demandes.' });
   }
 });
+
 
 
 module.exports = router;

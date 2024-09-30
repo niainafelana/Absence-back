@@ -1,11 +1,14 @@
 const express = require('express');
 const Employe = require('../models/employe');
+const { Op } = require("sequelize");
 const cron = require('node-cron');
 let router = express.Router()
 const  checkRole = require('../jsontokenweb/chekrole'); // Si dans le même fichier
 const checktokenmiddlware = require('../jsontokenweb/check');
+const sequelize = require('../db');
+
 //Ajout employer dans le bd
-router.put('',checktokenmiddlware, checkRole(['admin','utilisateur']), async (req, res) => {
+router.put('',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']), async (req, res) => {
   const { nom, prenom, sexe, motif, plafonnement, plafonnementbolean } = req.body;
 
   if (!nom || !prenom || !sexe || !motif) {
@@ -30,7 +33,7 @@ router.put('',checktokenmiddlware, checkRole(['admin','utilisateur']), async (re
  
 
   //Récupération tous les employés triés par date de création la plus récente
-router.get("/listetable", checktokenmiddlware, checkRole(['admin','utilisateur']),async (req, res) => {
+router.get("/listetable", checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']),async (req, res) => {
     try {
         const employes = await Employe.findAll({
             order: [["createdAt", "DESC"]],
@@ -44,7 +47,7 @@ router.get("/listetable", checktokenmiddlware, checkRole(['admin','utilisateur']
 });
 
 //Recherche par id(lib_employé)
-router.get('/search/:id', checktokenmiddlware, checkRole(['admin','utilisateur']),async (req, res) => {
+router.get('/search/:id', checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']),async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -62,7 +65,7 @@ router.get('/search/:id', checktokenmiddlware, checkRole(['admin','utilisateur']
 
 
 // Modification des employés par id
-router.patch('/modife/:id', checktokenmiddlware, checkRole(['admin']),async (req, res) => {
+router.patch('/modife/:id', checktokenmiddlware, checkRole(['ADMINISTRATEUR']),async (req, res) => {
   const { id } = req.params;
   const { nom, prenom, sexe, motif, plafonnement, plafonnementbolean } = req.body;
 
@@ -88,7 +91,7 @@ router.patch('/modife/:id', checktokenmiddlware, checkRole(['admin']),async (req
   }
 });
 //effacer un employé a l'aide de leur id si necessaire
-router.delete('/delete/:id',checktokenmiddlware, checkRole(['admin']), async (req, res) => {
+router.delete('/delete/:id',checktokenmiddlware, checkRole(['ADMINISTRATEUR']), async (req, res) => {
   try {
     const employe = await Employe.findByPk(req.params.id);
     if (!employe) {
@@ -102,22 +105,9 @@ router.delete('/delete/:id',checktokenmiddlware, checkRole(['admin']), async (re
   }
 });
 
-//agmentation du solde des employés
-cron.schedule('*/1 * * * *', async () => { // Toutes les minutes pour le test
-  try {
-    const employes = await Employe.findAll();
-    for (const employe of employes) {
-      employe.solde_employe = parseFloat(employe.solde_employe) + 2.5;
-      await employe.save();
-    }
-    console.log('Solde des employés augmente.');
-  } catch (error) {
-    console.error('Erreur :', error);
-  }
-});
 
 /**pour faire dataliste sur le champ employe*/
-router.get('/dataliste',checktokenmiddlware, checkRole(['admin','utilisateur']), async (req, res) => {
+router.get('/dataliste',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']), async (req, res) => {
   try {
     const employes = await Employe.findAll({
       attributes: ['id_employe', 'nom_employe', 'pre_employe'], // Sélectionner uniquement les champs nécessaires
@@ -129,4 +119,41 @@ router.get('/dataliste',checktokenmiddlware, checkRole(['admin','utilisateur']),
   }
 });
 
+
+async function updatesolde() {
+  try {
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+
+      const employes = await Employe.findAll({
+          where: {
+              [Op.or]: [
+                  { last_solde_update: { [Op.is]: null } },
+                  sequelize.where(sequelize.fn('MONTH', sequelize.col('last_solde_update')), { [Op.ne]: currentMonth + 1 }),
+                  sequelize.where(sequelize.fn('YEAR', sequelize.col('last_solde_update')), { [Op.ne]: currentYear })
+              ]
+          }
+      });
+
+      if (employes.length === 0) {
+          console.log("Tous les employés ont déjà été mis à jour ce mois-ci.");
+          return;
+      }
+
+      for (let employe of employes) {
+          employe.solde_employe += 2.5;
+          employe.last_solde_update = new Date();
+          await employe.save();
+      }
+
+      console.log(`Solde mis à jour pour ${employes.length} employés.`);
+  } catch (error) {
+      console.error("Erreur lors de la mise à jour des soldes : ", error);
+  }
+}
+cron.schedule(' 0 0 1 * *', () => {
+  console.log('Exécution du script de mise à jour des soldes des employés...');
+  updatesolde();
+});
 module.exports = router;
