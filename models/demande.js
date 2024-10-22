@@ -15,7 +15,7 @@ const Demande = DB.define('Demande',{
         type: DataTypes.INTEGER(10),
         allowNull: false,
         references: {
-          model: 'Employes',
+          model: 'personnel',
           key: 'id_employe'
         }
       },
@@ -56,10 +56,7 @@ const Demande = DB.define('Demande',{
         type: DataTypes.STRING,
         allowNull: false,  // 'demi-matin', 'demi-apres-midi' ou 'journee'
       },
-      jours_absence: {
-        type: DataTypes.FLOAT,
-        allowNull: false,
-      },
+  
       motif: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -67,10 +64,18 @@ const Demande = DB.define('Demande',{
       surplus:{
         type:DataTypes.FLOAT,
         allowNull:true,
+      },
+      solde_employe:{
+        type: DataTypes.FLOAT,
+        allowNull: true,
+      },
+      fichier: { 
+        type: DataTypes.STRING,
+        allowNull: true, 
       }
       
 });
-Demande.belongsTo(Employe, { foreignKey: 'id_employe', as: 'employe' });
+Demande.belongsTo(Employe, { foreignKey: 'id_employe', as: 'personnel' });
 Demande.belongsTo(Absence, { foreignKey: 'id_absence', as: 'absence' });
 Employe.hasMany(Demande, { foreignKey: 'id_employe', as: 'demandes' });
 Absence.hasMany(Demande, { foreignKey: 'id_absence', as: 'demandes' });

@@ -1,79 +1,221 @@
 const express = require('express');
 const { Op, fn, col, literal } = require('sequelize');
 const Demande = require("../models/demande");
-const Employe = require('../models/employe'); // Importer le modèle Employe
+const Employe = require('../models/employe');
+const Absence = require('../models/absence');
+const sequelize = require('../db');
+
 const router = express.Router();
-const  checkRole = require('../jsontokenweb/chekrole'); // Si dans le même fichier
+const checkRole = require('../jsontokenweb/chekrole'); 
 const checktokenmiddlware = require('../jsontokenweb/check');
 
-
-// Route pour obtenir les statistiques d'absence
-// Route pour obtenir les statistiques d'absence, avec ou sans filtre par nom/prénom
-router.get('/state',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']), async (req, res) => {
+router.get('/state',checktokenmiddlware, checkRole(['ADMINISTRATEUR']),  async (req, res) => {
     try {
         const currentYear = new Date().getFullYear();
-        
-        const { nom_employe, pre_employe, startDate, endDate } = req.query;
+        const { nom_employe, pre_employe, startDate, endDate, filtre } = req.query;
 
         const start = startDate || `${currentYear}-01-01`;
         const end = endDate || `${currentYear}-12-31`;
 
         let employeConditions = {};
-
         if (nom_employe) {
-            employeConditions.nom_employe = { [Op.like]: `%${nom_employe}%` }; 
+            employeConditions.nom_employe = { [Op.like]: `%${nom_employe}%` };
         }
         if (pre_employe) {
-            employeConditions.pre_employe = { [Op.like]: `%${pre_employe}%` }; 
+            employeConditions.pre_employe = { [Op.like]: `%${pre_employe}%` };
         }
 
         let employe;
         if (nom_employe || pre_employe) {
-            employe = await Employe.findOne({
-                where: employeConditions
-            });
-
+            employe = await Employe.findOne({ where: employeConditions });
             if (!employe) {
                 return res.status(404).json({ error: 'Aucun employé trouvé avec ce nom et prénom.' });
             }
         }
 
+        // Définition des conditions de filtrage
         let conditions = {
-            date_debut: {
-                [Op.between]: [start, end]
-            }
+            date_debut: { [Op.between]: [start, end] }
         };
 
         if (employe) {
             conditions.id_employe = employe.id_employe;
         }
 
-        const totalAbsences = await Demande.count({
-            where: conditions
-        });
+        // Total d'absences
+        const totalAbsences = await Demande.count({ where: conditions });
+        const totalDuree = await Demande.sum('jours_absence', { where: conditions }); // Calcul de la somme des durées
 
-        const absencesByMonth = await Demande.findAll({
-            attributes: [
-                [fn('COUNT', col('id_demande')), 'total_absences'],
-                [fn('MONTH', col('date_debut')), 'month']
-            ],
-            where: conditions,
-            group: [fn('MONTH', col('date_debut'))],
-            order: [[literal('month'), 'ASC']]
-        });
+        let absencesByFilter;
 
-        res.json({
+        // Application du filtre modifié
+        if (filtre === 'jour') {
+            absencesByFilter = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('id_demande')), 'total_absences'],
+                    [fn('DATE', col('date_debut')), 'date'], // Récupère la date complète
+                    [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées pour le filtre jour
+                ],
+                where: conditions,
+                group: [fn('DATE', col('date_debut'))],
+                order: [[literal('date'), 'ASC']]
+            });
+        } else if (filtre === 'semaine') {
+            absencesByFilter = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('id_demande')), 'total_absences'],
+                    [fn('WEEK', col('date_debut')), 'week'],
+                    [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées pour le filtre semaine
+                ],
+                where: conditions,
+                group: [fn('WEEK', col('date_debut'))],
+                order: [[literal('week'), 'ASC']]
+            });
+        } else if (filtre === 'mois') {
+            absencesByFilter = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('id_demande')), 'total_absences'],
+                    [fn('MONTH', col('date_debut')), 'month'],
+                    [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées pour le filtre mois
+                ],
+                where: conditions,
+                group: [fn('MONTH', col('date_debut'))],
+                order: [[literal('month'), 'ASC']]
+            });
+        } else if (filtre === 'annee') {
+            absencesByFilter = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('id_demande')), 'total_absences'],
+                    [fn('YEAR', col('date_debut')), 'year'],
+                    [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées pour le filtre année
+                ],
+                where: conditions,
+                group: [fn('YEAR', col('date_debut'))],
+                order: [[literal('year'), 'ASC']]
+            });
+        } else {
+            // Par défaut, on retourne les absences par mois
+            absencesByFilter = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('id_demande')), 'total_absences'],
+                    [fn('MONTH', col('date_debut')), 'month'],
+                    [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées pour le filtre par défaut
+                ],
+                where: conditions,
+                group: [fn('MONTH', col('date_debut'))],
+                order: [[literal('month'), 'ASC']]
+            });
+        }
+
+        // Total d'absences par type, avec le filtre appliqué
+        let totalAbsencesParType;
+        if (filtre === 'jour') {
+            totalAbsencesParType = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
+                    [fn('DATE', col('date_debut')), 'date'], // Récupère la date complète
+                    [sequelize.col('absence.nom_absence'), 'type_absence'],
+                    [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées par type
+                ],
+                include: [
+                    {
+                        model: Absence,
+                        as: 'absence',
+                        attributes: []
+                    }
+                ],
+                where: conditions,
+                group: [fn('DATE', col('date_debut')), 'absence.nom_absence'],
+                order: [[literal('date'), 'ASC']]
+            });
+        } else if (filtre === 'semaine') {
+            totalAbsencesParType = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
+                    [fn('WEEK', col('date_debut')), 'week'],
+                    [sequelize.col('absence.nom_absence'), 'type_absence'],
+                    [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées par type
+                ],
+                include: [
+                    {
+                        model: Absence,
+                        as: 'absence',
+                        attributes: []
+                    }
+                ],
+                where: conditions,
+                group: [fn('WEEK', col('date_debut')), 'absence.nom_absence'],
+                order: [[literal('week'), 'ASC']]
+            });
+        } else if (filtre === 'mois') {
+            totalAbsencesParType = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
+                    [fn('MONTH', col('date_debut')), 'month'],
+                    [sequelize.col('absence.nom_absence'), 'type_absence'],
+                    [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées par type
+                ],
+                include: [
+                    {
+                        model: Absence,
+                        as: 'absence',
+                        attributes: []
+                    }
+                ],
+                where: conditions,
+                group: [fn('MONTH', col('date_debut')), 'absence.nom_absence'],
+                order: [[literal('month'), 'ASC']]
+            });
+        } else if (filtre === 'annee') {
+            totalAbsencesParType = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
+                    [fn('YEAR', col('date_debut')), 'year'],
+                    [sequelize.col('absence.nom_absence'), 'type_absence'],
+                    [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées par type
+                ],
+                include: [
+                    {
+                        model: Absence,
+                        as: 'absence',
+                        attributes: []
+                    }
+                ],
+                where: conditions,
+                group: [fn('YEAR', col('date_debut')), 'absence.nom_absence'],
+                order: [[literal('year'), 'ASC']]
+            });
+        } else {
+            totalAbsencesParType = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
+                    [fn('MONTH', col('date_debut')), 'month'],
+                    [sequelize.col('absence.nom_absence'), 'type_absence'],
+                    [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées par type
+                ],
+                include: [
+                    {
+                        model: Absence,
+                        as: 'absence',
+                        attributes: []
+                    }
+                ],
+                where: conditions,
+                group: [fn('MONTH', col('date_debut')), 'absence.nom_absence'],
+                order: [[literal('month'), 'ASC']]
+            });
+        }
+
+        return res.status(200).json({
             totalAbsences,
-            absencesByMonth
+            totalDuree, // Ajoutez ici pour inclure la durée totale
+            absencesByFilter,
+            totalAbsencesParType,
         });
-
     } catch (error) {
-        console.error('Erreur lors de la récupération des statistiques d\'absence:', error);
-        res.status(500).json({ error: 'Une erreur est survenue lors de la récupération des statistiques d\'absence.' });
+        console.error(error);
+        return res.status(500).json({ error: 'Erreur lors de la récupération des données.' });
     }
 });
 
-
 module.exports = router;
-
-

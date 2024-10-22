@@ -3,6 +3,8 @@ const Employe = require("../models/employe");
 const Demande = require("../models/demande");
 const Absence = require("../models/absence");
 const { Op ,literal} = require("sequelize");
+const multer = require('multer');
+const path = require('path');
 const router = express.Router();
 const moment = require("moment");
 const  checkRole = require('../jsontokenweb/chekrole'); // Si dans le même fichier
@@ -144,6 +146,7 @@ router.put("/ajout",checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEU
       let motifSpecial = motif;
       let joursAbsenceSpecial = absence.duree; //duree avy any @ bd
       let joursAbsenceSaisis = parseFloat(jours_absence); //avy @ body
+      let solde_employe = employe.solde_employe;
 
       // Vérifiez les valeurs calculées
       console.log("joursAbsenceSaisis:", joursAbsenceSaisis);
@@ -187,6 +190,7 @@ router.put("/ajout",checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEU
           durefin,
           motif: motifSpecial,
           surplus,
+          solde_employe:solde_employe,
         });
 
         return res.status(201).json({
@@ -289,8 +293,11 @@ router.put("/ajout",checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEU
           });
         }
 
-        employe.solde_employe -= difference;
+        const nouveauSolde = employe.solde_employe - difference;
 
+  employe.solde_employe = nouveauSolde;
+
+        
         await employe.save();
         const dateFin = moment(dateDebutJS)
           .add(joursAbsenceSaisis - 1, "days")
@@ -326,6 +333,7 @@ router.put("/ajout",checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEU
           durefin,
           motif: motifSpecial,
           surplus: difference,
+          solde_employe:nouveauSolde,
         });
 
         return res.status(201).json({
@@ -438,7 +446,11 @@ router.put("/ajout",checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEU
         });
       }
 
-      employe.solde_employe -= joursDemande;
+      
+  const newsolde = employe.solde_employe - joursDemande;
+
+  // Mettez à jour le solde dans l'objet employé
+  employe.solde_employe = newsolde;
 
       await employe.save();
 
@@ -471,6 +483,7 @@ router.put("/ajout",checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEU
         durefin,
         motif: motifSpecial,
         surplus,
+        solde_employe:newsolde,
       });
 
       return res.status(201).json({
@@ -488,12 +501,12 @@ router.get("/tabledemande", checktokenmiddlware, checkRole(['ADMINISTRATEUR','UT
     const demandes = await Demande.findAll({
       include: {
         model: Employe,
-        as: "employe", // Utiliser l'alias défini dans l'association
+        as: "personnel", // Utiliser l'alias défini dans l'association
         attributes: [
           "nom_employe",
           "pre_employe",
-          "motif_employe",
-          "solde_employe",
+          "poste",
+          "matricule",
         ], // Sélectionner seulement le nom et le prénom
       },
       attributes: [
@@ -502,6 +515,10 @@ router.get("/tabledemande", checktokenmiddlware, checkRole(['ADMINISTRATEUR','UT
         "date_retour",
         "motif",
         "jours_absence",
+        "id_demande",
+        "solde_employe",
+        "fichier"
+
       ],
       order: [["createdAt", "DESC"]],
     });
@@ -531,7 +548,6 @@ router.get("/filtrage", checktokenmiddlware, checkRole(['ADMINISTRATEUR', 'UTILI
 
       const demandeConditions = {};
 
-      // Recherche par mois et année
       if (mois && annee) {
           demandeConditions[Op.and] = [
               literal(`MONTH(date_debut) = ${parseInt(mois, 10)}`),
@@ -572,7 +588,7 @@ router.get("/filtrage", checktokenmiddlware, checkRole(['ADMINISTRATEUR', 'UTILI
           include: [
               {
                   model: Employe,
-                  as: 'employe',
+                  as: 'personnel',
                   where: employeConditions
               }
           ]
@@ -585,6 +601,146 @@ router.get("/filtrage", checktokenmiddlware, checkRole(['ADMINISTRATEUR', 'UTILI
   }
 });
 
+router.delete('/deletedemande/:id',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']),  async (req, res) => {
+  const { id } = req.params;
 
+  try {
+      const demande = await Demande.findByPk(id);
+
+      if (!demande) {
+          return res.status(404).json({ message: "Demande non trouvée" });
+      }
+
+      await demande.destroy();
+
+      res.status(200).json({ message: "Demande supprimée avec succès" });
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({
+          message: "Erreur lors de la suppression de la demande",
+          error: error.message
+      });
+  }
+});
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/');  // Répertoire de destination
+  },
+  filename: function (req, file, cb) {
+    cb(null, file.originalname);  // Utilise le nom de fichier d'origine
+  }
+});
+
+
+const upload = multer({ storage: storage });
+const fs = require('fs');
+const { log } = require("console");
+
+// Route pour mettre à jour la demande et gérer l'upload d'un fichier
+router.put('/fichier/:id',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']),  upload.single('fichier'), async (req, res) => {
+  const demandeId = req.params.id;
+
+  try {
+    // Chercher la demande dans la base de données
+    const demande = await Demande.findByPk(demandeId);
+
+    if (!demande) {
+      return res.status(404).json({ message: 'Demande non trouvée' });
+    }
+
+    // Récupérer l'ancien fichier
+    const ancienFichier = demande.fichier; // Nom du fichier précédemment enregistré
+    console.log(`Ancien fichier : ${ancienFichier}`);
+
+    // Vérifier si un ancien fichier existe
+    if (ancienFichier) {
+      const ancienFichierPath = path.join(__dirname, 'uploads', ancienFichier);
+      console.log(`Chemin de l'ancien fichier : ${ancienFichierPath}`);
+
+      // Vérifier l'existence de l'ancien fichier
+      if (fs.existsSync(ancienFichierPath)) {
+        // Supprimer l'ancien fichier
+        fs.unlink(ancienFichierPath, (err) => {
+          if (err) {
+            console.error(`Erreur lors de la suppression du fichier : ${ancienFichierPath}`, err);
+            return res.status(500).json({ message: 'Erreur lors de la suppression du fichier existant' });
+          }
+          console.log(`Ancien fichier supprimé avec succès : ${ancienFichierPath}`);
+        });
+      } else {
+        console.log(`L'ancien fichier n'existe pas : ${ancienFichierPath}`);
+      }
+    } else {
+      console.log('Aucun ancien fichier à supprimer.');
+    }
+
+    // Mettre à jour avec le nouveau fichier
+    if (req.file) {
+      // Utiliser le nom original du fichier uploadé
+      demande.fichier = req.file.originalname; 
+    } else {
+      // Si aucun fichier n'est fourni, garder le fichier existant
+      demande.fichier = ancienFichier || demande.fichier; 
+    }
+
+    // Mise à jour des autres champs (si nécessaire)
+    const { date_debut, date_fin, motif } = req.body;
+    demande.date_debut = date_debut || demande.date_debut;
+    demande.date_fin = date_fin || demande.date_fin;
+    demande.motif = motif || demande.motif;
+
+    // Sauvegarder les modifications
+    await demande.save();
+
+    res.status(200).json({ message: 'Demande mise à jour avec succès', demande });
+
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour de la demande', error);
+    res.status(500).json({ message: 'Erreur lors de la mise à jour de la demande', error });
+  }
+});
+// Route pour télécharger le fichier associé à une demande et le renvoyer en Base64
+router.get('/download/:id',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']), async (req, res) => {
+  const demandeId = req.params.id;
+
+  try {
+    // Rechercher la demande par son ID dans la base de données
+    const demande = await Demande.findByPk(demandeId);
+    
+    // Vérifier si la demande ou le fichier associé existe
+    if (!demande || !demande.fichier) {
+      console.log('Demande ou fichier non trouvé', { demande });
+      return res.status(404).json({ message: 'Demande ou fichier non trouvé' });
+    }
+
+    // Construire le chemin complet du fichier
+    const filePath = path.join('/home/felana/Felaniaina/DA2I/SociétéMiezaka/back/uploads', demande.fichier);
+    console.log('Chemin du fichier :', filePath);
+
+    // Lire le fichier
+    fs.readFile(filePath, (err, data) => {
+      if (err) {
+        return res.status(404).json({ message: 'Fichier non trouvé', error: err });
+      }
+
+      // Convertir le fichier en Base64
+      const base64File = Buffer.from(data).toString('base64');
+
+      // Obtenir l'extension du fichier pour que le client puisse identifier le type de fichier
+      const fileExtension = path.extname(demande.fichier).slice(1); // Supprimer le "." de l'extension
+      const filename = demande.fichier;
+
+      // Renvoyer la réponse avec le fichier encodé en Base64 et ses métadonnées
+      res.status(200).json({
+        base64File,
+        fileExtension,
+        filename
+      });
+    });
+  } catch (error) {
+    console.error('Erreur lors de la récupération de la demande:', error);
+    res.status(500).json({ message: 'Erreur lors de la récupération de la demande', error });
+  }
+});
 
 module.exports = router;

@@ -3,13 +3,14 @@ const Employe = require('../models/employe');
 const { Op } = require("sequelize");
 const cron = require('node-cron');
 let router = express.Router()
-const  checkRole = require('../jsontokenweb/chekrole'); // Si dans le même fichier
+
+const  checkRole = require('../jsontokenweb/chekrole'); 
 const checktokenmiddlware = require('../jsontokenweb/check');
 const sequelize = require('../db');
 
 //Ajout employer dans le bd
 router.put('',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']), async (req, res) => {
-  const { nom, prenom, sexe, motif, plafonnement, plafonnementbolean } = req.body;
+  const { nom, prenom, sexe, motif, plafonnement, plafonnementbolean,matricule,departement } = req.body;
 
   if (!nom || !prenom || !sexe || !motif) {
     return res.status(400).json({ message: 'Donnée manquante' });
@@ -20,7 +21,9 @@ router.put('',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']), 
       nom_employe: nom,
       pre_employe: prenom,
       sexe: sexe,
-      motif_employe: motif,
+      poste: motif,
+      matricule:matricule,
+      departement:departement,
       plafonnement: plafonnement || null,
       plafonnementbolean: plafonnementbolean || false,
     });
@@ -67,7 +70,7 @@ router.get('/search/:id', checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTIL
 // Modification des employés par id
 router.patch('/modife/:id', checktokenmiddlware, checkRole(['ADMINISTRATEUR']),async (req, res) => {
   const { id } = req.params;
-  const { nom, prenom, sexe, motif, plafonnement, plafonnementbolean } = req.body;
+  const { nom, prenom, sexe, motif, plafonnement, plafonnementbolean,matricule,departement} = req.body;
 
   try {
     const employe = await Employe.findOne({ where: { id_employe: id } });
@@ -79,7 +82,9 @@ router.patch('/modife/:id', checktokenmiddlware, checkRole(['ADMINISTRATEUR']),a
     employe.nom_employe = nom !== undefined ? nom : employe.nom_employe;
     employe.pre_employe = prenom !== undefined ? prenom : employe.pre_employe;
     employe.sexe = sexe !== undefined ? sexe : employe.sexe;
-    employe.motif_employe = motif !== undefined ? motif : employe.motif_employe;
+    employe.poste = motif !== undefined ? motif : employe.poste;
+    employe.matricule = matricule !==undefined ? matricule:employe.matricule;
+    employe.departement= departement !==undefined ? departement:employe.departement;
     employe.plafonnement = plafonnement !== undefined ? plafonnement : employe.plafonnement;
     employe.plafonnementbolean = plafonnementbolean !== undefined ? plafonnementbolean : employe.plafonnementbolean;
 
@@ -116,6 +121,31 @@ router.get('/dataliste',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILIS
   } catch (error) {
     console.error('Erreur lors de la récupération des employés:', error);
     res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Route pour filtrer les utilisateurs par nom
+// Route pour filtrer les employés par matricule
+router.get('/mitady',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']),  async (req, res) => {
+  const { matricule } = req.query; 
+
+  try {
+      const employes = await Employe.findAll({
+          where: {
+              matricule: {
+                  [Op.like]: `%${matricule}%`, // Rechercher les employés avec un matricule partiel ou complet
+              },
+          },
+          order: [['createdAt', 'DESC']],
+      });
+
+      if (employes.length === 0) {
+          return res.status(204).send(); // Aucune donnée trouvée
+      }
+
+      res.json({ message: 'Liste des employés', data: employes });
+  } catch (err) {
+      res.status(500).json({ message: 'Erreur de la base de données', error: err });
   }
 });
 
