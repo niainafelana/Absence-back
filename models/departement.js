@@ -19,7 +19,7 @@ const Departement = DB.define('Departement',{
       type:DataTypes.STRING,
       allowNull: true,
   },
-    fonction: {
+    localisation: {
       type: DataTypes.STRING,
       defaultValue: true,
     },

@@ -6,7 +6,7 @@ const  checkRole = require('../jsontokenweb/chekrole'); // Si dans le même fich
 const checktokenmiddlware = require('../jsontokenweb/check');
 // Route pour ajouter un nouveau département
 router.post('/ajoutdepart',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']), async (req, res) => {
-    const { code_departement, description, fonction, nom_departement } = req.body;
+    const { code_departement, description, localisation, nom_departement } = req.body;
 
     try {
         const departementExiste = await Departement.findOne({
@@ -27,7 +27,7 @@ router.post('/ajoutdepart',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTI
         const nouveauDepartement = await Departement.create({
             code_departement,
             description,
-            fonction,
+            localisation,
             nom_departement
         });
 
@@ -60,7 +60,7 @@ router.get("/recuperation",checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTI
 // Route pour modifier un département
 router.put('/modifiedepart/:id',checktokenmiddlware, checkRole(['ADMINISTRATEUR']),  async (req, res) => {
     const { id } = req.params; 
-    const { code_departement, description, fonction, nom_departement } = req.body;
+    const { code_departement, description, localisation, nom_departement } = req.body;
 
     try {
         const departement = await Departement.findByPk(id);
@@ -70,7 +70,7 @@ router.put('/modifiedepart/:id',checktokenmiddlware, checkRole(['ADMINISTRATEUR'
         }
         departement.code_departement = code_departement || departement.code_departement;
         departement.description = description || departement.description;
-        departement.fonction = fonction || departement.fonction;
+        departement.localisation = localisation || departement.localisation;
         departement.nom_departement = nom_departement || departement.nom_departement;
 
         await departement.save();
@@ -108,10 +108,11 @@ router.delete('/deletedepart/:id',checktokenmiddlware, checkRole(['ADMINISTRATEU
     }
 });
 // Route pour récupérer tous les noms de départements
-router.get('/nomdepartement',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']),  async (req, res) => {
+// Route pour récupérer tous les noms et codes des départements
+router.get('/nomdepartement', async (req, res) => {
     try {
         const departements = await Departement.findAll({
-            attributes: ['nom_departement'] 
+            attributes: ['nom_departement', 'code_departement'] // Inclure `code_departement` en plus de `nom_departement`
         });
 
         res.json(departements);
@@ -120,5 +121,30 @@ router.get('/nomdepartement',checktokenmiddlware, checkRole(['ADMINISTRATEUR','U
         res.status(500).json({ message: 'Erreur serveur lors de la récupération des départements' });
     }
 });
+//RECHERCHE
+router.get('/searchdepartement', async (req, res) => {
+    const { nom } = req.query; 
+  
+    try {
+        const departement = await Departement.findAll({
+            where: {
+                [Op.or]: [
+                    { nom_departement: { [Op.like]: `%${nom}%` } },
+                    { code_departement: { [Op.like]: `%${nom}%` } }
+                ]
+            },
+            order: [['createdAt', 'DESC']],
+        });
+  
+        if (departement.length === 0) {
+            return res.status(204).send(); 
+        }
+  
+        res.json({ message: 'Liste des départements', data: departement });
+    } catch (err) {
+        res.status(500).json({ message: 'Erreur de la base de données', error: err });
+    }
+});
+
 
 module.exports = router;

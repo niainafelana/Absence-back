@@ -128,4 +128,28 @@ router.get('/pote/:nomDepartement', checktokenmiddlware, checkRole(['ADMINISTRAT
     }
 });
 
+//RECHERCHE PAR DESCRIPTION
+router.get('/description', async (req, res) => {
+    const { nom } = req.query; 
+  
+    try {
+        const poste = await Poste.findAll({
+            where: {
+                [Op.or]: [
+                    { description: { [Op.like]: `%${nom}%` } }
+                ]
+            },
+            order: [['createdAt', 'DESC']],
+        });
+  
+        if (poste.length === 0) {
+            return res.status(204).send(); 
+        }
+  
+        res.json({ message: 'Liste des départements', data: poste });
+    } catch (err) {
+        res.status(500).json({ message: 'Erreur de la base de données', error: err });
+    }
+});
+
 module.exports = router;

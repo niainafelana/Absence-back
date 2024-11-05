@@ -542,7 +542,10 @@ router.get("/filtrage", checktokenmiddlware, checkRole(['ADMINISTRATEUR', 'UTILI
       const employeConditions = {
           [Op.or]: [
               { nom_employe: { [Op.like]: `%${recherche}%` } },
-              { pre_employe: { [Op.like]: `%${recherche}%` } }
+              { pre_employe: { [Op.like]: `%${recherche}%` } },
+              { matricule: { [Op.like]: `%${recherche}%` } },
+
+
           ]
       };
 

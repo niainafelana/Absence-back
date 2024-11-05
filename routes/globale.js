@@ -9,33 +9,42 @@ const router = express.Router();
 const checkRole = require('../jsontokenweb/chekrole'); 
 const checktokenmiddlware = require('../jsontokenweb/check');
 
-router.get('/state',checktokenmiddlware, checkRole(['ADMINISTRATEUR']),  async (req, res) => {
+router.get('/depatementnylisitra',  async (req, res) => {
     try {
         const currentYear = new Date().getFullYear();
-        const { nom_employe, pre_employe, startDate, endDate, filtre } = req.query;
+        const { departement, startDate, endDate, filtre } = req.query;
 
         const start = startDate || `${currentYear}-01-01`;
         const end = endDate || `${currentYear}-12-31`;
 
         let employeConditions = {};
-        if (nom_employe) {
-            employeConditions.nom_employe = { [Op.like]: `%${nom_employe}%` };
-        }
-        if (pre_employe) {
-            employeConditions.pre_employe = { [Op.like]: `%${pre_employe}%` };
+    
+        if (departement) {
+            employeConditions.departement = { [Op.like]: `%${departement}%` };
         }
 
         let employe;
-        if (nom_employe || pre_employe) {
-            employe = await Employe.findOne({ where: employeConditions });
-            if (!employe) {
+        if (departement) {
+            employe = await Employe.findOne({ where: employeConditions, attributes: [
+                'id_employe',
+                'nom_employe',
+                'pre_employe',
+                'sexe',
+                'poste',
+                'matricule',
+                'departement',
+                'solde_employe',
+                'plafonnement',
+                'plafonnementbolean',
+                'last_solde_update',
+            ]});            if (!employe) {
                 return res.status(404).json({ error: 'Aucun employé trouvé avec ce nom et prénom.' });
             }
         }
 
         // Définition des conditions de filtrage
         let conditions = {
-            date_demande: { [Op.between]: [start, end] }
+            date_debut: { [Op.between]: [start, end] }
         };
 
         if (employe) {
@@ -53,44 +62,44 @@ router.get('/state',checktokenmiddlware, checkRole(['ADMINISTRATEUR']),  async (
             absencesByFilter = await Demande.findAll({
                 attributes: [
                     [fn('COUNT', col('id_demande')), 'total_absences'],
-                    [fn('DATE', col('date_demande')), 'date'], // Récupère la date complète
+                    [fn('DATE', col('date_debut')), 'date'], // Récupère la date complète
                     [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées pour le filtre jour
                 ],
                 where: conditions,
-                group: [fn('DATE', col('date_demande'))],
+                group: [fn('DATE', col('date_debut'))],
                 order: [[literal('date'), 'ASC']]
             });
         } else if (filtre === 'semaine') {
             absencesByFilter = await Demande.findAll({
                 attributes: [
                     [fn('COUNT', col('id_demande')), 'total_absences'],
-                    [fn('WEEK', col('date_demande')), 'week'],
+                    [fn('WEEK', col('date_debut')), 'week'],
                     [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées pour le filtre semaine
                 ],
                 where: conditions,
-                group: [fn('WEEK', col('date_demande'))],
+                group: [fn('WEEK', col('date_debut'))],
                 order: [[literal('week'), 'ASC']]
             });
         } else if (filtre === 'mois') {
             absencesByFilter = await Demande.findAll({
                 attributes: [
                     [fn('COUNT', col('id_demande')), 'total_absences'],
-                    [fn('MONTH', col('date_demande')), 'month'],
+                    [fn('MONTH', col('date_debut')), 'month'],
                     [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées pour le filtre mois
                 ],
                 where: conditions,
-                group: [fn('MONTH', col('date_demande'))],
+                group: [fn('MONTH', col('date_debut'))],
                 order: [[literal('month'), 'ASC']]
             });
         } else if (filtre === 'annee') {
             absencesByFilter = await Demande.findAll({
                 attributes: [
                     [fn('COUNT', col('id_demande')), 'total_absences'],
-                    [fn('YEAR', col('date_demande')), 'year'],
+                    [fn('YEAR', col('date_debut')), 'year'],
                     [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées pour le filtre année
                 ],
                 where: conditions,
-                group: [fn('YEAR', col('date_demande'))],
+                group: [fn('YEAR', col('date_debut'))],
                 order: [[literal('year'), 'ASC']]
             });
         } else {
@@ -98,11 +107,11 @@ router.get('/state',checktokenmiddlware, checkRole(['ADMINISTRATEUR']),  async (
             absencesByFilter = await Demande.findAll({
                 attributes: [
                     [fn('COUNT', col('id_demande')), 'total_absences'],
-                    [fn('MONTH', col('date_demande')), 'month'],
+                    [fn('MONTH', col('date_debut')), 'month'],
                     [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées pour le filtre par défaut
                 ],
                 where: conditions,
-                group: [fn('MONTH', col('date_demande'))],
+                group: [fn('MONTH', col('date_debut'))],
                 order: [[literal('month'), 'ASC']]
             });
         }
@@ -113,7 +122,7 @@ router.get('/state',checktokenmiddlware, checkRole(['ADMINISTRATEUR']),  async (
             totalAbsencesParType = await Demande.findAll({
                 attributes: [
                     [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
-                    [fn('DATE', col('date_demande')), 'date'], // Récupère la date complète
+                    [fn('DATE', col('date_debut')), 'date'], // Récupère la date complète
                     [sequelize.col('absence.nom_absence'), 'type_absence'],
                     [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées par type
                 ],
@@ -125,14 +134,14 @@ router.get('/state',checktokenmiddlware, checkRole(['ADMINISTRATEUR']),  async (
                     }
                 ],
                 where: conditions,
-                group: [fn('DATE', col('date_demande')), 'absence.nom_absence'],
+                group: [fn('DATE', col('date_debut')), 'absence.nom_absence'],
                 order: [[literal('date'), 'ASC']]
             });
         } else if (filtre === 'semaine') {
             totalAbsencesParType = await Demande.findAll({
                 attributes: [
                     [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
-                    [fn('WEEK', col('date_demande')), 'week'],
+                    [fn('WEEK', col('date_debut')), 'week'],
                     [sequelize.col('absence.nom_absence'), 'type_absence'],
                     [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées par type
                 ],
@@ -144,14 +153,14 @@ router.get('/state',checktokenmiddlware, checkRole(['ADMINISTRATEUR']),  async (
                     }
                 ],
                 where: conditions,
-                group: [fn('WEEK', col('date_demande')), 'absence.nom_absence'],
+                group: [fn('WEEK', col('date_debut')), 'absence.nom_absence'],
                 order: [[literal('week'), 'ASC']]
             });
         } else if (filtre === 'mois') {
             totalAbsencesParType = await Demande.findAll({
                 attributes: [
                     [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
-                    [fn('MONTH', col('date_demande')), 'month'],
+                    [fn('MONTH', col('date_debut')), 'month'],
                     [sequelize.col('absence.nom_absence'), 'type_absence'],
                     [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées par type
                 ],
@@ -163,14 +172,14 @@ router.get('/state',checktokenmiddlware, checkRole(['ADMINISTRATEUR']),  async (
                     }
                 ],
                 where: conditions,
-                group: [fn('MONTH', col('date_demande')), 'absence.nom_absence'],
+                group: [fn('MONTH', col('date_debut')), 'absence.nom_absence'],
                 order: [[literal('month'), 'ASC']]
             });
         } else if (filtre === 'annee') {
             totalAbsencesParType = await Demande.findAll({
                 attributes: [
                     [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
-                    [fn('YEAR', col('date_demande')), 'year'],
+                    [fn('YEAR', col('date_debut')), 'year'],
                     [sequelize.col('absence.nom_absence'), 'type_absence'],
                     [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées par type
                 ],
@@ -182,14 +191,14 @@ router.get('/state',checktokenmiddlware, checkRole(['ADMINISTRATEUR']),  async (
                     }
                 ],
                 where: conditions,
-                group: [fn('YEAR', col('date_demande')), 'absence.nom_absence'],
+                group: [fn('YEAR', col('date_debut')), 'absence.nom_absence'],
                 order: [[literal('year'), 'ASC']]
             });
         } else {
             totalAbsencesParType = await Demande.findAll({
                 attributes: [
                     [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
-                    [fn('MONTH', col('date_demande')), 'month'],
+                    [fn('MONTH', col('date_debut')), 'month'],
                     [sequelize.col('absence.nom_absence'), 'type_absence'],
                     [fn('SUM', col('jours_absence')), 'total_duree'] // Somme des durées par type
                 ],
@@ -201,7 +210,7 @@ router.get('/state',checktokenmiddlware, checkRole(['ADMINISTRATEUR']),  async (
                     }
                 ],
                 where: conditions,
-                group: [fn('MONTH', col('date_demande')), 'absence.nom_absence'],
+                group: [fn('MONTH', col('date_debut')), 'absence.nom_absence'],
                 order: [[literal('month'), 'ASC']]
             });
         }

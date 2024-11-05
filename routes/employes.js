@@ -70,7 +70,7 @@ router.get('/search/:id', checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTIL
 // Modification des employés par id
 router.patch('/modife/:id', checktokenmiddlware, checkRole(['ADMINISTRATEUR']),async (req, res) => {
   const { id } = req.params;
-  const { nom, prenom, sexe, motif, plafonnement, plafonnementbolean,matricule,departement} = req.body;
+  const { nom, prenom, sexe, motif, plafonnement, plafonnementbolean,matricule,departement,solde_employe} = req.body;
 
   try {
     const employe = await Employe.findOne({ where: { id_employe: id } });
@@ -87,6 +87,7 @@ router.patch('/modife/:id', checktokenmiddlware, checkRole(['ADMINISTRATEUR']),a
     employe.departement= departement !==undefined ? departement:employe.departement;
     employe.plafonnement = plafonnement !== undefined ? plafonnement : employe.plafonnement;
     employe.plafonnementbolean = plafonnementbolean !== undefined ? plafonnementbolean : employe.plafonnementbolean;
+    employe.solde_employe = solde_employe !== undefined ? solde_employe : employe.solde_employe;
 
     await employe.save();
 
@@ -126,15 +127,17 @@ router.get('/dataliste',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILIS
 
 // Route pour filtrer les utilisateurs par nom
 // Route pour filtrer les employés par matricule
-router.get('/mitady',checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']),  async (req, res) => {
-  const { matricule } = req.query; 
+router.get('/mitady', async (req, res) => {
+  const { search } = req.query; // Utiliser un champ générique "search" pour capturer la valeur de recherche
 
   try {
       const employes = await Employe.findAll({
           where: {
-              matricule: {
-                  [Op.like]: `%${matricule}%`, // Rechercher les employés avec un matricule partiel ou complet
-              },
+              [Op.or]: [
+                  { matricule: { [Op.like]: `%${search}%` } },
+                  { nom_employe: { [Op.like]: `%${search}%` } },
+                  { pre_employe: { [Op.like]: `%${search}%` } },
+              ],
           },
           order: [['createdAt', 'DESC']],
       });
