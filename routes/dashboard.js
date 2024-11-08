@@ -218,4 +218,201 @@ router.get('/state',checktokenmiddlware, checkRole(['ADMINISTRATEUR']),  async (
     }
 });
 
+
+router.get('/tableaudeboard', async (req, res) => {
+    try {
+        const currentYear = new Date().getFullYear();
+        const { startDate, endDate, filtre } = req.query;
+
+        const start = startDate || `${currentYear}-01-01`;
+        const end = endDate || `${currentYear}-12-31`;
+
+        // Définition des conditions de filtrage
+        let conditions = {
+            date_demande: { [Op.between]: [start, end] }
+        };
+
+        // Total d'absences
+        const totalAbsences = await Demande.count({ where: conditions });
+
+        let absencesByFilter;
+
+        // Application du filtre modifié
+        if (filtre === 'jour') {
+            absencesByFilter = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('id_demande')), 'total_absences'],
+                    [fn('DATE', col('date_demande')), 'date'], // Récupère la date complète
+                ],
+                where: conditions,
+                group: [fn('DATE', col('date_demande'))],
+                order: [[literal('date'), 'ASC']]
+            });
+        } else if (filtre === 'semaine') {
+            absencesByFilter = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('id_demande')), 'total_absences'],
+                    [fn('WEEK', col('date_demande')), 'week'],
+                ],
+                where: conditions,
+                group: [fn('WEEK', col('date_demande'))],
+                order: [[literal('week'), 'ASC']]
+            });
+        } else if (filtre === 'mois') {
+            absencesByFilter = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('id_demande')), 'total_absences'],
+                    [fn('MONTH', col('date_demande')), 'month'],
+                ],
+                where: conditions,
+                group: [fn('MONTH', col('date_demande'))],
+                order: [[literal('month'), 'ASC']]
+            });
+        } else if (filtre === 'annee') {
+            absencesByFilter = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('id_demande')), 'total_absences'],
+                    [fn('YEAR', col('date_demande')), 'year'],
+                ],
+                where: conditions,
+                group: [fn('YEAR', col('date_demande'))],
+                order: [[literal('year'), 'ASC']]
+            });
+        } else {
+            // Par défaut, on retourne les absences par mois
+            absencesByFilter = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('id_demande')), 'total_absences'],
+                    [fn('MONTH', col('date_demande')), 'month'],
+                ],
+                where: conditions,
+                group: [fn('MONTH', col('date_demande'))],
+                order: [[literal('month'), 'ASC']]
+            });
+        }
+
+        // Total d'absences par type, avec le filtre appliqué
+        let totalAbsencesParType;
+        if (filtre === 'jour') {
+            totalAbsencesParType = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
+                    [fn('DATE', col('date_demande')), 'date'], // Récupère la date complète
+                ],
+                include: [
+                    {
+                        model: Absence,
+                        as: 'absence',
+                        attributes: []
+                    }
+                ],
+                where: conditions,
+                group: [fn('DATE', col('date_demande')), 'absence.nom_absence'],
+                order: [[literal('date'), 'ASC']]
+            });
+        } else if (filtre === 'semaine') {
+            totalAbsencesParType = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
+                    [fn('WEEK', col('date_demande')), 'week'],
+                ],
+                include: [
+                    {
+                        model: Absence,
+                        as: 'absence',
+                        attributes: []
+                    }
+                ],
+                where: conditions,
+                group: [fn('WEEK', col('date_demande')), 'absence.nom_absence'],
+                order: [[literal('week'), 'ASC']]
+            });
+        } else if (filtre === 'mois') {
+            totalAbsencesParType = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
+                    [fn('MONTH', col('date_demande')), 'month'],
+                ],
+                include: [
+                    {
+                        model: Absence,
+                        as: 'absence',
+                        attributes: []
+                    }
+                ],
+                where: conditions,
+                group: [fn('MONTH', col('date_demande')), 'absence.nom_absence'],
+                order: [[literal('month'), 'ASC']]
+            });
+        } else if (filtre === 'annee') {
+            totalAbsencesParType = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
+                    [fn('YEAR', col('date_demande')), 'year'],
+                ],
+                include: [
+                    {
+                        model: Absence,
+                        as: 'absence',
+                        attributes: []
+                    }
+                ],
+                where: conditions,
+                group: [fn('YEAR', col('date_demande')), 'absence.nom_absence'],
+                order: [[literal('year'), 'ASC']]
+            });
+        } else {
+            totalAbsencesParType = await Demande.findAll({
+                attributes: [
+                    [fn('COUNT', col('Demande.id_demande')), 'total_absences'],
+                    [fn('MONTH', col('date_demande')), 'month'],
+                ],
+                include: [
+                    {
+                        model: Absence,
+                        as: 'absence',
+                        attributes: []
+                    }
+                ],
+                where: conditions,
+                group: [fn('MONTH', col('date_demande')), 'absence.nom_absence'],
+                order: [[literal('month'), 'ASC']]
+            });
+        }
+
+        return res.status(200).json({
+            totalAbsences,
+            absencesByFilter,
+            totalAbsencesParType,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: 'Erreur lors de la récupération des données.' });
+    }
+});
+
+router.get('/tableauannee', async (req, res) => {
+    try {
+        const absencesByYear = await Demande.findAll({
+            attributes: [
+                [fn('COUNT', col('id_demande')), 'total_absences'],
+                [fn('YEAR', col('date_demande')), 'year'],
+            ],
+            group: [fn('YEAR', col('date_demande'))],
+            order: [[literal('year'), 'ASC']]
+        });
+
+        // Total d'absences globales
+    
+
+        return res.status(200).json({
+           
+            absencesByYear,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: 'Erreur lors de la récupération des données.' });
+    }
+});
+
 module.exports = router;

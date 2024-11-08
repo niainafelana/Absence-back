@@ -61,7 +61,7 @@ router.post('/login', (req, res) => {
 
         const token = jwt.sign(
           {
-            id_user: user.id_user,
+            id: user.id,
             nom:user.nom,
             email: user.email,
             role: user.role,
@@ -211,17 +211,7 @@ router.post('/mdpoublie', async (req, res) => {
   }
 });
 
-// Fonction pour trouver un utilisateur par email
-const findUserByEmail = async (email) => {
-  try {
-    // Rechercher l'utilisateur dans la base de données par email
-    const utilisateur = await Utilisateur.findOne({ where: { email } });
-    return utilisateur;
-  } catch (error) {
-    console.error("Erreur lors de la recherche de l'utilisateur par email :", error);
-    throw error; // Renvoyer l'erreur pour la gérer plus tard
-  }
-};
+
 
 router.post('/verifiercode', async (req, res) => {
   const { email, code, nouveauMotDePasse } = req.body;
@@ -294,26 +284,40 @@ function authMiddleware(req, res, next) {
   });
 }
 
-
 // Route pour mettre à jour le profil utilisateur
 router.put('/api/update', async (req, res) => {
-  const { nom, email, currentPassword, newPassword } = req.body;
+  const { nom, email, currentPassword, newPassword, id } = req.body;
+  console.log(id);
 
   try {
     // Recherche de l'utilisateur par email
-    const user = await Utilisateur.findOne({ where: { email } });
+    const user = await Utilisateur.findByPk(id);
+    console.log(user);
     if (!user) {
       return res.status(404).json({ message: 'Utilisateur non trouvé' });
     }
 
-    // Vérification du mot de passe actuel
+    // Vérification du mot de passe actuel si un nouveau mot de passe est fourni
     if (newPassword) {
+      // Vérification du mot de passe actuel
       const isMatch = await bcrypt.compare(currentPassword, user.password);
       if (!isMatch) {
         return res.status(400).json({ message: 'Mot de passe actuel incorrect' });
       }
+
+      // Vérification que le nouveau mot de passe n'est pas vide et respecte les critères
+      const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/; // Exige au moins 8 caractères, avec au moins une lettre et un chiffre
+      if (!newPassword.match(passwordRegex)) {
+        return res.status(400).json({
+          message: 'Le nouveau mot de passe doit contenir au moins 6 caractères, avec des lettres et des chiffres.',
+        });
+      }
+
       // Mise à jour du mot de passe
       user.password = await bcrypt.hash(newPassword, 10);
+    } else if (currentPassword) {
+      // Si currentPassword est fourni mais que newPassword est vide
+      return res.status(400).json({ message: 'Le nouveau mot de passe ne peut pas être vide.' });
     }
 
     // Mise à jour des autres informations seulement si elles sont fournies
@@ -329,7 +333,7 @@ router.put('/api/update', async (req, res) => {
     // Génération d'un nouveau token avec les nouvelles informations
     const token = jwt.sign(
       {
-        id_user: user.id,
+        id: user.id,
         nom: user.nom,
         email: user.email,
         role: user.role,
@@ -344,5 +348,6 @@ router.put('/api/update', async (req, res) => {
     res.status(500).json({ message: 'Erreur lors de la mise à jour des informations', error: error.message });
   }
 });
+
 
 module.exports = router;
