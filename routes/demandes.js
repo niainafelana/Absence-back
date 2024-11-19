@@ -499,16 +499,24 @@ router.put("/ajout",checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEU
 router.get("/tabledemande", checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEUR']),async (req, res) => {
   try {
     const demandes = await Demande.findAll({
-      include: {
-        model: Employe,
-        as: "personnel", // Utiliser l'alias défini dans l'association
-        attributes: [
-          "nom_employe",
-          "pre_employe",
-          "poste",
-          "matricule",
-        ], // Sélectionner seulement le nom et le prénom
-      },
+      include: [
+        {
+          model: Employe,
+          as: "personnel", // Alias défini dans l'association
+          attributes: [
+            "nom_employe",
+            "pre_employe",
+            "poste",
+            "matricule",
+          ], // Sélectionner seulement certains attributs
+        },
+        {
+          model: Absence,
+          as: "absence", // Alias défini dans l'association
+          attributes: ["nom_absence"], // Inclure uniquement le champ nom_absence
+        },
+      ],
+      
       attributes: [
         "date_debut",
         "date_fin",
@@ -517,7 +525,8 @@ router.get("/tabledemande", checktokenmiddlware, checkRole(['ADMINISTRATEUR','UT
         "jours_absence",
         "id_demande",
         "solde_employe",
-        "fichier"
+        "fichier",
+        "date_demande"
 
       ],
       order: [["createdAt", "DESC"]],
@@ -544,8 +553,6 @@ router.get("/filtrage", checktokenmiddlware, checkRole(['ADMINISTRATEUR', 'UTILI
               { nom_employe: { [Op.like]: `%${recherche}%` } },
               { pre_employe: { [Op.like]: `%${recherche}%` } },
               { matricule: { [Op.like]: `%${recherche}%` } },
-
-
           ]
       };
 
@@ -553,23 +560,23 @@ router.get("/filtrage", checktokenmiddlware, checkRole(['ADMINISTRATEUR', 'UTILI
 
       if (mois && annee) {
           demandeConditions[Op.and] = [
-              literal(`MONTH(date_debut) = ${parseInt(mois, 10)}`),
-              literal(`YEAR(date_debut) = ${parseInt(annee, 10)}`)
+              literal(`MONTH(date_demande) = ${parseInt(mois, 10)}`),
+              literal(`YEAR(date_demande) = ${parseInt(annee, 10)}`)
           ];
       } else if (mois) {
           demandeConditions[Op.and] = [
-              literal(`MONTH(date_debut) = ${parseInt(mois, 10)}`)
+              literal(`MONTH(date_demande) = ${parseInt(mois, 10)}`)
           ];
       } else if (annee) {
           demandeConditions[Op.and] = [
-              literal(`YEAR(date_debut) = ${parseInt(annee, 10)}`)
+              literal(`YEAR(date_demande) = ${parseInt(annee, 10)}`)
           ];
       }
 
       // Recherche par plage de dates
       if (date_debut && date_fin) {
           // Recherche des demandes dont la date_debut est entre date_debut et date_fin
-          demandeConditions.date_debut = {
+          demandeConditions.date_demande = {
               [Op.between]: [
                   new Date(date_debut).setHours(0, 0, 0, 0),  // Début de la première date
                   new Date(date_fin).setHours(23, 59, 59, 999)  // Fin de la dernière date
@@ -577,7 +584,7 @@ router.get("/filtrage", checktokenmiddlware, checkRole(['ADMINISTRATEUR', 'UTILI
           };
       } else if (date_debut) {
           // Recherche des demandes dont la date_debut est exactement à date_debut (même jour, toutes heures)
-          demandeConditions.date_debut = {
+          demandeConditions.date_demande = {
               [Op.between]: [
                   new Date(date_debut).setHours(0, 0, 0, 0),  // Début de la journée
                   new Date(date_debut).setHours(23, 59, 59, 999)  // Fin de la journée
