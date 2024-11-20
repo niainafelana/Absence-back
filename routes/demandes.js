@@ -131,13 +131,13 @@ router.put("/ajout",checktokenmiddlware, checkRole(['ADMINISTRATEUR','UTILISATEU
     }
 
     // Vérifier que le type d'absence est compatible avec le sexe
-    if (absence.nom_absence === "maternite" && employe.sexe !== "F") {
+    if (absence.nom_absence === "Matérnité" && employe.sexe !== "F") {
       return res
         .status(400)
         .json({ error: "Un homme ne peut pas avoir un congé de maternité" });
     }
 
-    if (absence.nom_absence === "paternite" && employe.sexe !== "M") {
+    if (absence.nom_absence === "Patérnité" && employe.sexe !== "M") {
       return res
         .status(400)
         .json({ error: "Une femme ne peut pas avoir un congé de paternité" });
